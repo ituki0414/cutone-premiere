@@ -357,6 +357,9 @@
     async function refreshTranscriptionSequenceInfo() {
         console.log("[CutOne] refreshTranscriptionSequenceInfo called");
 
+        // DEBUG: Show that we're trying to get sequence
+        elements.transcriptionSequenceName.textContent = "取得中...";
+
         try {
             console.log("[CutOne] Calling CEP.getActiveSequence()...");
             const result = await CEP.getActiveSequence();
@@ -369,7 +372,8 @@
                 console.log("[CutOne] Transcription screen - Sequence loaded:", result.name);
             } else {
                 currentSequence = null;
-                elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
+                // DEBUG: Show actual result for debugging
+                elements.transcriptionSequenceName.textContent = "結果: " + JSON.stringify(result);
                 elements.transcriptionSequenceDuration.textContent = "--:--";
                 console.log("[CutOne] Transcription screen - No sequence, result:", result);
             }
@@ -377,9 +381,11 @@
             // When callExtendScript rejects (success: false), this is triggered
             // Update UI to show no sequence
             currentSequence = null;
-            elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
+            // DEBUG: Show actual error for debugging
+            const errorMsg = e.message || e.toString() || "unknown error";
+            elements.transcriptionSequenceName.textContent = "エラー: " + errorMsg;
             elements.transcriptionSequenceDuration.textContent = "--:--";
-            console.error("[CutOne] Transcription screen - Error getting sequence:", e.message || e);
+            console.error("[CutOne] Transcription screen - Error getting sequence:", errorMsg);
         }
     }
 
