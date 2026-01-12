@@ -501,7 +501,7 @@ var _deleteCallCount = 0;
 
 /**
  * Delete segments using setInPoint/setOutPoint + extract
- * v16.1 - Frame-aligned cuts to prevent video/audio desync
+ * v16.2 - Use exact timebase for all frame rates (23.976, 29.97, etc.)
  */
 function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingAfter) {
     _deleteCallCount++;
@@ -510,7 +510,7 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
     log("########################################");
     log("### FUNCTION CALL #" + callId + " ###");
     log("########################################");
-    log("=== deleteSegmentsUsingTimeCode v16.1 (frame-aligned) ===");
+    log("=== deleteSegmentsUsingTimeCode v16.2 (exact timebase) ===");
     log("Input segments count: " + segments.length);
     log("Padding: before=" + paddingBefore + ", after=" + paddingAfter);
 
@@ -586,17 +586,19 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
         }
 
         // Align to frame boundary to prevent video/audio desync
-        var frameRate = 30; // Default, will try to get from sequence
+        // sequence.timebase returns ticks per frame directly
+        var ticksPerFrame = TICKS_PER_SECOND / 30; // Default 30fps
         try {
             var timebase = sequence.timebase;
             if (timebase) {
-                frameRate = Math.round(TICKS_PER_SECOND / parseFloat(timebase));
+                ticksPerFrame = parseFloat(timebase);
+                var actualFps = TICKS_PER_SECOND / ticksPerFrame;
+                log("  Sequence fps: " + actualFps.toFixed(3) + " (timebase: " + ticksPerFrame + ")");
             }
         } catch (e) {
-            log("  Using default 30fps");
+            log("  Using default 30fps timebase");
         }
 
-        var ticksPerFrame = TICKS_PER_SECOND / frameRate;
         var startTicks = Math.round(cutStart * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
         var endTicks = Math.round(cutEnd * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
 
