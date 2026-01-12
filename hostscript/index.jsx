@@ -1960,6 +1960,7 @@ function getFirstClipPath() {
  * Add captions to sequence as actual caption track
  * Uses Premiere Pro's Caption API to create proper subtitles
  * @param {string} segmentsJson - JSON array of {start, end, text} segments
+ * v21.2 - Enhanced debug info and fix marker timing
  */
 function addCaptionsToSequence(segmentsJson) {
     try {
@@ -1970,69 +1971,128 @@ function addCaptionsToSequence(segmentsJson) {
             return JSON.stringify({ success: false, error: "No active sequence" });
         }
 
-        log("=== addCaptionsToSequence v2.0 (Caption Track) ===");
+        log("=== addCaptionsToSequence v21.2 (Enhanced Debug) ===");
+        log("Premiere version: " + app.version);
         log("Adding " + segments.length + " caption segments");
 
         var addedCount = 0;
+        var debugInfo = {
+            premiereVersion: app.version,
+            hasCaptionTracks: false,
+            captionTracksNumTracks: -1,
+            hasCreateCaptionTrack: false,
+            captionTrackMethods: [],
+            captionApiError: null,
+            graphicsError: null
+        };
 
         // Try to use Caption API (Premiere Pro 2021+)
         try {
-            // Check if captionTracks exists
-            if (sequence.captionTracks && sequence.captionTracks.numTracks !== undefined) {
-                log("Caption API available, tracks: " + sequence.captionTracks.numTracks);
+            debugInfo.hasCaptionTracks = (sequence.captionTracks !== undefined);
+            log("captionTracks exists: " + debugInfo.hasCaptionTracks);
 
-                var captionTrack;
-
-                // Get or create caption track
-                if (sequence.captionTracks.numTracks > 0) {
-                    captionTrack = sequence.captionTracks[0];
-                    log("Using existing caption track");
-                } else {
-                    // Try to create a new caption track
-                    // Note: createCaptionTrack might not be available in all versions
-                    if (sequence.createCaptionTrack) {
-                        captionTrack = sequence.createCaptionTrack();
-                        log("Created new caption track");
-                    }
+            // Check if captionTracks exists and has numTracks
+            if (sequence.captionTracks) {
+                // Try to get numTracks
+                try {
+                    debugInfo.captionTracksNumTracks = sequence.captionTracks.numTracks;
+                    log("captionTracks.numTracks: " + debugInfo.captionTracksNumTracks);
+                } catch (numErr) {
+                    log("Could not get numTracks: " + numErr);
+                    debugInfo.captionApiError = "numTracks error: " + numErr;
                 }
 
-                if (captionTrack) {
-                    // Add captions to the track
-                    for (var i = 0; i < segments.length; i++) {
-                        var seg = segments[i];
+                debugInfo.hasCreateCaptionTrack = (typeof sequence.createCaptionTrack === "function");
+                log("createCaptionTrack exists: " + debugInfo.hasCreateCaptionTrack);
+
+                if (debugInfo.captionTracksNumTracks >= 0) {
+                    var captionTrack = null;
+
+                    // Get or create caption track
+                    if (debugInfo.captionTracksNumTracks > 0) {
+                        captionTrack = sequence.captionTracks[0];
+                        log("Using existing caption track");
+                    } else if (debugInfo.hasCreateCaptionTrack) {
                         try {
-                            // Create caption item
-                            // Different methods depending on Premiere version
-                            if (captionTrack.addCaption) {
-                                captionTrack.addCaption(seg.start, seg.end - seg.start, seg.text);
-                                addedCount++;
-                                log("Added caption " + (i + 1) + ": " + seg.text.substring(0, 30));
-                            } else if (captionTrack.insertCaption) {
-                                captionTrack.insertCaption(seg.start, seg.end, seg.text);
-                                addedCount++;
-                                log("Inserted caption " + (i + 1));
-                            }
-                        } catch (capErr) {
-                            log("Caption API error for segment " + (i + 1) + ": " + capErr);
+                            captionTrack = sequence.createCaptionTrack();
+                            log("Created new caption track");
+                        } catch (createErr) {
+                            log("Could not create caption track: " + createErr);
+                            debugInfo.captionApiError = "createCaptionTrack error: " + createErr;
                         }
                     }
-                }
 
-                if (addedCount > 0) {
-                    return JSON.stringify({
-                        success: true,
-                        count: addedCount,
-                        total: segments.length,
-                        method: "captionTrack"
-                    });
+                    if (captionTrack) {
+                        // List available methods on captionTrack
+                        for (var key in captionTrack) {
+                            if (typeof captionTrack[key] === "function") {
+                                debugInfo.captionTrackMethods.push(key);
+                            }
+                        }
+                        log("Caption track methods: " + debugInfo.captionTrackMethods.join(", "));
+
+                        // Add captions to the track
+                        for (var i = 0; i < segments.length; i++) {
+                            var seg = segments[i];
+                            try {
+                                // Try different method signatures
+                                if (typeof captionTrack.addCaption === "function") {
+                                    // Try with Time objects (ticks)
+                                    var startTicks = Math.round(seg.start * TICKS_PER_SECOND);
+                                    var durationTicks = Math.round((seg.end - seg.start) * TICKS_PER_SECOND);
+                                    captionTrack.addCaption(startTicks, durationTicks, seg.text);
+                                    addedCount++;
+                                    log("Added caption " + (i + 1) + " via addCaption (ticks)");
+                                } else if (typeof captionTrack.insertCaption === "function") {
+                                    var startTicks = Math.round(seg.start * TICKS_PER_SECOND);
+                                    var endTicks = Math.round(seg.end * TICKS_PER_SECOND);
+                                    captionTrack.insertCaption(startTicks, endTicks, seg.text);
+                                    addedCount++;
+                                    log("Inserted caption " + (i + 1) + " via insertCaption");
+                                } else {
+                                    log("No addCaption or insertCaption method found");
+                                    if (i === 0) {
+                                        debugInfo.captionApiError = "No add/insert method";
+                                    }
+                                    break;
+                                }
+                            } catch (capErr) {
+                                log("Caption API error for segment " + (i + 1) + ": " + capErr);
+                                if (i === 0) {
+                                    debugInfo.captionApiError = capErr.toString();
+                                }
+                                // Try seconds format as fallback
+                                try {
+                                    if (typeof captionTrack.addCaption === "function") {
+                                        captionTrack.addCaption(seg.start, seg.end - seg.start, seg.text);
+                                        addedCount++;
+                                        log("Added caption " + (i + 1) + " via addCaption (seconds)");
+                                    }
+                                } catch (secErr) {
+                                    log("Seconds format also failed: " + secErr);
+                                }
+                            }
+                        }
+                    }
+
+                    if (addedCount > 0) {
+                        return JSON.stringify({
+                            success: true,
+                            count: addedCount,
+                            total: segments.length,
+                            method: "captionTrack",
+                            debug: debugInfo
+                        });
+                    }
                 }
             }
         } catch (captionErr) {
-            log("Caption API not available or error: " + captionErr);
+            log("Caption API error: " + captionErr);
+            debugInfo.captionApiError = captionErr.toString();
         }
 
         // Fallback: Create Graphics Text clips as subtitles on V2 track
-        log("Using Graphics Text fallback method");
+        log("Caption API failed, trying Graphics Text fallback");
 
         try {
             addedCount = createTextGraphicsForCaptions(sequence, segments);
@@ -2042,11 +2102,13 @@ function addCaptionsToSequence(segmentsJson) {
                     success: true,
                     count: addedCount,
                     total: segments.length,
-                    method: "graphicsText"
+                    method: "graphicsText",
+                    debug: debugInfo
                 });
             }
         } catch (gfxErr) {
             log("Graphics text error: " + gfxErr);
+            debugInfo.graphicsError = gfxErr.toString();
         }
 
         // Final fallback: Use markers (original method)
@@ -2058,11 +2120,15 @@ function addCaptionsToSequence(segmentsJson) {
         for (var i = 0; i < segments.length; i++) {
             var seg = segments[i];
             try {
-                var marker = markers.createMarker(seg.start);
+                // FIXED: Convert seconds to ticks for createMarker
+                var startTicks = Math.round(seg.start * TICKS_PER_SECOND);
+                var endTicks = Math.round(seg.end * TICKS_PER_SECOND);
+
+                var marker = markers.createMarker(startTicks);
                 if (marker) {
                     marker.name = seg.text.substring(0, 50);
                     marker.comments = seg.text;
-                    marker.end = seg.end;
+                    marker.end = { ticks: String(endTicks) };
                     marker.setColorByIndex(3); // Yellow
                     addedCount++;
                 }
@@ -2076,7 +2142,8 @@ function addCaptionsToSequence(segmentsJson) {
             count: addedCount,
             total: segments.length,
             method: "markers",
-            note: "Caption API not available. Markers created instead. Import the SRT file manually for proper subtitles."
+            note: "Caption API not available. Markers created instead. Import the SRT file manually for proper subtitles.",
+            debug: debugInfo
         });
     } catch (e) {
         log("addCaptionsToSequence error: " + e.toString());
