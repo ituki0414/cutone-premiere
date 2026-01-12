@@ -501,7 +501,7 @@ var _deleteCallCount = 0;
 
 /**
  * Delete segments using setInPoint/setOutPoint + extract
- * v16.2 - Use exact timebase for all frame rates (23.976, 29.97, etc.)
+ * v16.3 - Fix sequence playback by properly clearing in/out points via QE API
  */
 function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingAfter) {
     _deleteCallCount++;
@@ -510,7 +510,7 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
     log("########################################");
     log("### FUNCTION CALL #" + callId + " ###");
     log("########################################");
-    log("=== deleteSegmentsUsingTimeCode v16.2 (exact timebase) ===");
+    log("=== deleteSegmentsUsingTimeCode v16.3 (playback fix) ===");
     log("Input segments count: " + segments.length);
     log("Padding: before=" + paddingBefore + ", after=" + paddingAfter);
 
@@ -619,9 +619,13 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
             qeSeq.extract();
             extractCallCount++;
 
-            // Clear in/out points
-            sequence.setInPoint(-1);
-            sequence.setOutPoint(-1);
+            // Clear in/out points using QE API
+            try {
+                qeSeq.setInPoint("");
+                qeSeq.setOutPoint("");
+            } catch (clearErr) {
+                log("  Note: Could not clear in/out points via QE");
+            }
 
             // Verify result
             var durAfter = getSequenceDuration(sequence);
@@ -636,8 +640,8 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
         } catch (e) {
             log("  ERROR: " + e.toString());
             try {
-                sequence.setInPoint(-1);
-                sequence.setOutPoint(-1);
+                qeSeq.setInPoint("");
+                qeSeq.setOutPoint("");
             } catch (e2) {}
         }
     }
