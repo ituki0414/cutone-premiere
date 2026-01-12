@@ -436,17 +436,78 @@ const CEP = (function() {
             console.log("[CEP] Total silence to cut: " + totalSilence.toFixed(2) + "s");
             console.log("[CEP] Expected remaining: " + (originalDuration - totalSilence).toFixed(2) + "s");
 
-            // Step 6: Send to ExtendScript
-            if (onProgress) onProgress("cut", 80, null, `${adjustedSegments.length}箇所の無音をカット中...`);
+            // Step 6: Process segments in batches with progress updates
+            const BATCH_SIZE = 5; // Process 5 segments at a time for progress updates
+            const totalSegments = adjustedSegments.length;
+            const silenceAction = options.silenceAction || "delete";
+            const paddingBefore = options.paddingBefore || 0.2;
+            const paddingAfter = options.paddingAfter || 0.2;
 
-            const processOptions = {
-                segments: adjustedSegments,
-                paddingBefore: options.paddingBefore || 0.2,
-                paddingAfter: options.paddingAfter || 0.2,
-                silenceAction: options.silenceAction || "delete"
-            };
+            let processedCount = 0;
+            let totalDeletedCount = 0;
+            let result = null;
+            const batchStartTime = Date.now();
 
-            const result = await callExtendScript("processSegments", [JSON.stringify(processOptions)]);
+            // Sort segments by start time descending (process from end to start)
+            // This is critical to avoid position shifts when deleting
+            const sortedSegments = [...adjustedSegments].sort((a, b) => b.start - a.start);
+
+            // Process in batches for progress updates
+            const batches = [];
+            for (let i = 0; i < sortedSegments.length; i += BATCH_SIZE) {
+                batches.push(sortedSegments.slice(i, i + BATCH_SIZE));
+            }
+
+            console.log("[CEP] Processing " + totalSegments + " segments in " + batches.length + " batches");
+
+            for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+                const batch = batches[batchIndex];
+
+                // Calculate progress
+                const progressPercent = 80 + Math.round((batchIndex / batches.length) * 18); // 80-98%
+                const elapsedMs = Date.now() - batchStartTime;
+                const avgTimePerSegment = processedCount > 0 ? elapsedMs / processedCount : 200;
+                const remainingSegments = totalSegments - processedCount;
+                const estimatedRemainingMs = remainingSegments * avgTimePerSegment;
+                const estimatedRemainingSec = Math.ceil(estimatedRemainingMs / 1000);
+
+                // Format remaining time
+                let timeStr = "";
+                if (estimatedRemainingSec > 60) {
+                    const mins = Math.floor(estimatedRemainingSec / 60);
+                    const secs = estimatedRemainingSec % 60;
+                    timeStr = `残り約${mins}分${secs}秒`;
+                } else if (estimatedRemainingSec > 0) {
+                    timeStr = `残り約${estimatedRemainingSec}秒`;
+                }
+
+                const currentSegmentNum = processedCount + 1;
+                const progressMessage = `カット中... ${currentSegmentNum}/${totalSegments}件 (${Math.round((processedCount / totalSegments) * 100)}%) ${timeStr}`;
+                if (onProgress) onProgress("cut", progressPercent, null, progressMessage);
+
+                const processOptions = {
+                    segments: batch,
+                    paddingBefore: paddingBefore,
+                    paddingAfter: paddingAfter,
+                    silenceAction: silenceAction,
+                    batchIndex: batchIndex,
+                    totalBatches: batches.length,
+                    isLastBatch: batchIndex === batches.length - 1
+                };
+
+                result = await callExtendScript("processSegments", [JSON.stringify(processOptions)]);
+
+                if (result && result.segmentsProcessed) {
+                    totalDeletedCount += result.segmentsProcessed;
+                }
+                processedCount += batch.length;
+            }
+
+            // Update result with totals
+            if (result) {
+                result.segmentsFound = totalSegments;
+                result.segmentsProcessed = totalDeletedCount;
+            }
 
             console.log("[CEP] Result:", JSON.stringify(result, null, 2));
 

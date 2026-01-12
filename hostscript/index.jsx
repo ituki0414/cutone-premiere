@@ -391,49 +391,59 @@ function processSegments(optionsJson) {
         var callId = _processSegmentsCallCount;
         var currentTime = new Date().getTime();
 
-        log("========== processSegments v18.0 (Protected) ==========");
-        log("### CALL #" + callId + " at " + currentTime + " ###");
-
-        // CRITICAL: Check for duplicate call within cooldown period
-        var timeSinceLastProcess = currentTime - _lastProcessTime;
-        if (_lastProcessTime > 0 && timeSinceLastProcess < PROCESS_COOLDOWN_MS) {
-            log("!!! BLOCKED: Duplicate call within cooldown period !!!");
-            log("Time since last: " + timeSinceLastProcess + "ms (cooldown: " + PROCESS_COOLDOWN_MS + "ms)");
-            return JSON.stringify({
-                success: false,
-                error: "DUPLICATE_BLOCKED",
-                blocked: true,
-                timeSinceLastProcess: timeSinceLastProcess
-            });
-        }
-
         var options = JSON.parse(optionsJson);
 
         var segments = options.segments || [];
         var paddingBefore = options.paddingBefore || 0.2;
         var paddingAfter = options.paddingAfter || 0.2;
         var silenceAction = options.silenceAction || "delete";
+        var batchIndex = options.batchIndex || 0;
+        var totalBatches = options.totalBatches || 1;
+        var isLastBatch = options.isLastBatch || (totalBatches === 1);
+        var isBatchMode = totalBatches > 1;
 
-        // Create a hash of the call to detect exact duplicates
-        var callHash = segments.length + "_" + paddingBefore + "_" + paddingAfter + "_" + silenceAction;
-        if (segments.length > 0) {
-            callHash += "_" + segments[0].start.toFixed(3) + "_" + segments[segments.length-1].end.toFixed(3);
+        log("========== processSegments v19.0 (Batch Support) ==========");
+        log("### CALL #" + callId + " | Batch " + (batchIndex + 1) + "/" + totalBatches + " ###");
+
+        // Only apply duplicate protection for first batch or non-batch mode
+        if (batchIndex === 0) {
+            var timeSinceLastProcess = currentTime - _lastProcessTime;
+            if (_lastProcessTime > 0 && timeSinceLastProcess < PROCESS_COOLDOWN_MS) {
+                log("!!! BLOCKED: Duplicate call within cooldown period !!!");
+                log("Time since last: " + timeSinceLastProcess + "ms (cooldown: " + PROCESS_COOLDOWN_MS + "ms)");
+                return JSON.stringify({
+                    success: false,
+                    error: "DUPLICATE_BLOCKED",
+                    blocked: true,
+                    timeSinceLastProcess: timeSinceLastProcess
+                });
+            }
+
+            // Create a hash of the call to detect exact duplicates
+            var callHash = segments.length + "_" + paddingBefore + "_" + paddingAfter + "_" + silenceAction;
+            if (segments.length > 0) {
+                callHash += "_" + segments[0].start.toFixed(3) + "_" + segments[segments.length-1].end.toFixed(3);
+            }
+
+            log("Call hash: " + callHash);
+            log("Last hash: " + _lastProcessHash);
+
+            // Check for exact duplicate call (same parameters)
+            if (callHash === _lastProcessHash && timeSinceLastProcess < PROCESS_COOLDOWN_MS * 2) {
+                log("!!! BLOCKED: Exact duplicate call with same parameters !!!");
+                return JSON.stringify({
+                    success: false,
+                    error: "EXACT_DUPLICATE_BLOCKED",
+                    blocked: true
+                });
+            }
+
+            // Mark as processing BEFORE the actual work (only first batch)
+            _lastProcessTime = currentTime;
+            _lastProcessHash = callHash;
         }
 
-        log("Call hash: " + callHash);
-        log("Last hash: " + _lastProcessHash);
-
-        // Check for exact duplicate call (same parameters)
-        if (callHash === _lastProcessHash && timeSinceLastProcess < PROCESS_COOLDOWN_MS * 2) {
-            log("!!! BLOCKED: Exact duplicate call with same parameters !!!");
-            return JSON.stringify({
-                success: false,
-                error: "EXACT_DUPLICATE_BLOCKED",
-                blocked: true
-            });
-        }
-
-        log("Segments: " + segments.length);
+        log("Segments in this batch: " + segments.length);
         log("Action: " + silenceAction);
         log("Padding: " + paddingBefore + " / " + paddingAfter);
 
@@ -456,10 +466,6 @@ function processSegments(optionsJson) {
             });
         }
 
-        // Mark as processing BEFORE the actual work
-        _lastProcessTime = currentTime;
-        _lastProcessHash = callHash;
-
         var processedCount = 0;
 
         if (silenceAction === "delete") {
@@ -475,8 +481,11 @@ function processSegments(optionsJson) {
         log("New duration: " + newDuration.toFixed(2) + "s");
         log("Saved: " + savedPercent.toFixed(1) + "%");
 
-        // Update last process time AFTER completion
-        _lastProcessTime = new Date().getTime();
+        // Update last process time AFTER completion (only on last batch or non-batch mode)
+        if (isLastBatch) {
+            _lastProcessTime = new Date().getTime();
+            log("Cooldown started (last batch complete)");
+        }
 
         return JSON.stringify({
             success: true,
@@ -487,6 +496,8 @@ function processSegments(optionsJson) {
             savedPercent: savedPercent,
             action: silenceAction,
             callId: callId,
+            batchIndex: batchIndex,
+            totalBatches: totalBatches,
             debugLog: getDebugLog()
         });
 
@@ -501,37 +512,25 @@ var _deleteCallCount = 0;
 
 /**
  * Delete segments using setInPoint/setOutPoint + extract
- * v16.3 - Fix sequence playback by properly clearing in/out points via QE API
+ * v16.4 - Batch mode support with progress display
  */
 function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingAfter) {
     _deleteCallCount++;
     var callId = _deleteCallCount;
 
-    log("########################################");
-    log("### FUNCTION CALL #" + callId + " ###");
-    log("########################################");
-    log("=== deleteSegmentsUsingTimeCode v16.3 (playback fix) ===");
+    log("=== deleteSegmentsUsingTimeCode v16.4 (batch support) ===");
     log("Input segments count: " + segments.length);
     log("Padding: before=" + paddingBefore + ", after=" + paddingAfter);
 
-    // CRITICAL: If this is called more than once, we have a problem!
-    if (callId > 1) {
-        log("!!! WARNING: Function called " + callId + " times! This might be the bug !!!");
-    }
-
-    // Log ALL segments BEFORE sorting
-    log("--- ALL " + segments.length + " segments (chronological from FFmpeg): ---");
+    // Log segments (already sorted descending by CEP in batch mode)
+    log("--- Segments to process (already sorted by CEP): ---");
     for (var j = 0; j < segments.length; j++) {
-        log("  [" + j + "] " + segments[j].start.toFixed(2) + "s - " + segments[j].end.toFixed(2) + "s (dur: " + (segments[j].end - segments[j].start).toFixed(2) + "s)");
+        log("  [" + j + "] " + segments[j].start.toFixed(2) + "s - " + segments[j].end.toFixed(2) + "s");
     }
 
     // Sort descending by start time (delete from end first)
+    // This is redundant if CEP already sorted, but ensures correctness
     segments.sort(function(a, b) { return b.start - a.start; });
-
-    log("--- Processing order (end to start): ---");
-    for (var k = 0; k < segments.length; k++) {
-        log("  Process #" + (k+1) + ": " + segments[k].start.toFixed(2) + "s - " + segments[k].end.toFixed(2) + "s");
-    }
 
     // Enable QE
     app.enableQE();
@@ -646,15 +645,10 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
         }
     }
 
-    log("########################################");
-    log("### SUMMARY FOR CALL #" + callId + " ###");
-    log("########################################");
-    log("Total segments received: " + segments.length);
-    log("Extract() calls made: " + extractCallCount);
-    log("Successful deletions: " + deletedCount);
-    log("Skipped: " + skippedCount);
-    log("Function call count so far: " + _deleteCallCount);
-    log("########################################");
+    log("--- Batch complete ---");
+    log("Segments in batch: " + segments.length);
+    log("Extract() calls: " + extractCallCount);
+    log("Successful: " + deletedCount + ", Skipped: " + skippedCount);
 
     return deletedCount;
 }
