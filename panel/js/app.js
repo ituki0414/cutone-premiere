@@ -367,6 +367,11 @@
                 elements.transcriptionSequenceDuration.textContent = "--:--";
             }
         } catch (e) {
+            // When callExtendScript rejects (success: false), this is triggered
+            // Update UI to show no sequence
+            currentSequence = null;
+            elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
+            elements.transcriptionSequenceDuration.textContent = "--:--";
             console.error("[CutOne] Error getting sequence:", e);
         }
     }
