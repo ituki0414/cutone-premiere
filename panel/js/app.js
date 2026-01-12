@@ -531,61 +531,70 @@
 
             let results = [];
 
+            // Get project folder path for SRT export
+            const sequenceResult = await CEP.callExtendScript("getSequenceInfo", []);
+            let srtPath = "";
+
+            if (sequenceResult && sequenceResult.projectPath) {
+                const projectDir = sequenceResult.projectPath.replace(/[^/\\]+$/, "");
+                srtPath = projectDir + currentSequence.name + "_captions.srt";
+            } else {
+                // Fallback to temp directory
+                const os = require("os");
+                srtPath = os.tmpdir() + "/" + (currentSequence?.name || "captions") + ".srt";
+            }
+
+            // Always export SRT first
+            const srtResult = await CEP.exportSRT(transcriptionSegments, srtPath);
+
+            if (!srtResult || !srtResult.success) {
+                hideLoading();
+                showToast("SRTファイルの保存に失敗しました", "error");
+                return;
+            }
+
             // Add to sequence as captions
             if (addToSeq) {
-                const addResult = await CEP.addCaptionsToSequence(transcriptionSegments);
-                console.log("[CutOne] addCaptionsToSequence result:", JSON.stringify(addResult, null, 2));
+                // Import SRT into project
+                const importResult = await CEP.callExtendScript("importSRTCaptions", [srtPath]);
+                console.log("[CutOne] importSRTCaptions result:", JSON.stringify(importResult, null, 2));
 
-                if (addResult && addResult.success) {
-                    // Show result based on method used
-                    switch (addResult.method) {
-                        case "captionTrack":
-                            results.push(`${addResult.count}個の字幕を追加しました`);
-                            break;
-                        case "srtImport":
-                            results.push(`SRTを字幕トラックとしてインポートしました`);
-                            break;
-                        case "srtProjectOnly":
-                            results.push(`SRTをプロジェクトにインポートしました`);
-                            if (addResult.message) {
-                                results.push(addResult.message);
-                            }
-                            break;
-                        default:
-                            results.push(`${addResult.count}個の字幕を追加しました`);
+                if (importResult && importResult.success) {
+                    if (importResult.addedToSequence) {
+                        results.push(`字幕トラックに追加しました`);
+                    } else {
+                        results.push(`SRTをプロジェクトにインポートしました`);
+                        // Open Finder to show the SRT file
+                        try {
+                            const { exec } = require("child_process");
+                            exec(`open -R "${srtPath}"`);
+                        } catch (e) {
+                            console.log("[CutOne] Could not open Finder:", e);
+                        }
+                        results.push(`「キャプション」パネルにドラッグして追加してください`);
                     }
                 } else {
-                    // Caption API and SRT import both failed
-                    if (addResult && addResult.debug) {
-                        console.log("[CutOne] Caption API Debug Info:");
-                        console.log("  - hasCaptionTracks:", addResult.debug.hasCaptionTracks);
-                        console.log("  - numTracks:", addResult.debug.captionTracksNumTracks);
-                        console.log("  - hasCreateCaptionTrack:", addResult.debug.hasCreateCaptionTrack);
-                        console.log("  - captionTrackMethods:", addResult.debug.captionTrackMethods);
-                        console.log("  - captionApiError:", addResult.debug.captionApiError);
+                    results.push(`SRTをエクスポートしました: ${srtPath}`);
+                    // Open Finder to show the SRT file
+                    try {
+                        const { exec } = require("child_process");
+                        exec(`open -R "${srtPath}"`);
+                    } catch (e) {
+                        console.log("[CutOne] Could not open Finder:", e);
                     }
-                    results.push(`字幕追加に失敗: ${addResult?.error || "不明なエラー"}`);
+                    results.push(`Finderで開きました。シーケンスにドラッグして追加してください`);
                 }
             }
 
-            // Export SRT file
-            if (exportSrt) {
-                // Get project folder path
-                const sequenceResult = await CEP.callExtendScript("getSequenceInfo", []);
-                let srtPath = "";
-
-                if (sequenceResult && sequenceResult.projectPath) {
-                    const projectDir = sequenceResult.projectPath.replace(/[^/\\]+$/, "");
-                    srtPath = projectDir + currentSequence.name + "_captions.srt";
-                } else {
-                    // Fallback to temp directory
-                    const os = require("os");
-                    srtPath = os.tmpdir() + "/" + (currentSequence?.name || "captions") + ".srt";
-                }
-
-                const srtResult = await CEP.exportSRT(transcriptionSegments, srtPath);
-                if (srtResult && srtResult.success) {
-                    results.push(`SRTファイルを保存: ${srtPath}`);
+            // Export SRT file notification
+            if (exportSrt && !addToSeq) {
+                results.push(`SRTファイルを保存: ${srtPath}`);
+                // Open Finder to show the SRT file
+                try {
+                    const { exec } = require("child_process");
+                    exec(`open -R "${srtPath}"`);
+                } catch (e) {
+                    console.log("[CutOne] Could not open Finder:", e);
                 }
             }
 
