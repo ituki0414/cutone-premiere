@@ -28,11 +28,16 @@ const CEP = (function() {
         try {
             csInterface = new CSInterface();
             console.log("[CEP] CSInterface OK");
+            console.log("[CEP] Host environment:", JSON.stringify(csInterface.getHostEnvironment()));
             return csInterface;
         } catch (e) {
             console.error("[CEP] Init failed:", e);
             return null;
         }
+    }
+
+    function isConnected() {
+        return csInterface !== null;
     }
 
     function cepPathToFs(cepPath) {
@@ -1335,6 +1340,7 @@ const CEP = (function() {
 
     return {
         init,
+        isConnected,
         getActiveSequence,
         processWithOptions,
         previewWithOptions,
