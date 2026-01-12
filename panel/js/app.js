@@ -109,20 +109,13 @@
     let currentWizardStep = 1;
     let selectedSectionType = "all";
     let selectedTracks = ["A1", "A2", "A3"];
+    let isProcessing = false; // Guard against multiple concurrent processing
 
     // ============================================
     // Initialization
     // ============================================
     function init() {
         console.log("[CutOne] ========== Initializing CutOne ==========");
-
-        // DEBUG: Global click listener to see what's being clicked
-        document.addEventListener("click", function(e) {
-            console.log("[CutOne DEBUG] Click detected on:", e.target);
-            console.log("[CutOne DEBUG] Target ID:", e.target.id);
-            console.log("[CutOne DEBUG] Target classList:", e.target.classList ? Array.from(e.target.classList) : "none");
-            console.log("[CutOne DEBUG] Target parentElement:", e.target.parentElement ? e.target.parentElement.id || e.target.parentElement.className : "none");
-        }, true); // capture phase
 
         // Initialize i18n
         const lang = I18n.init();
@@ -214,53 +207,22 @@
         // Generate preview button
         elements.generatePreviewBtn.addEventListener("click", generatePreview);
 
-        // Process button
+        // Process button - SINGLE listener only, with guard flag
         console.log("[CutOne] Setting up processBtn listener, element:", elements.processBtn);
-        if (elements.processBtn) {
-            // Try multiple event types for CEP compatibility
+        if (elements.processBtn && !elements.processBtn._listenerAttached) {
+            elements.processBtn._listenerAttached = true;
             elements.processBtn.addEventListener("click", function(e) {
-                console.log("[CutOne] Process button CLICK!", e);
+                console.log("[CutOne] Process button CLICK!");
+                e.preventDefault();
+                e.stopPropagation();
                 processSequence();
             });
-            elements.processBtn.addEventListener("mousedown", function(e) {
-                console.log("[CutOne] Process button MOUSEDOWN!", e);
-            });
-            elements.processBtn.addEventListener("mouseup", function(e) {
-                console.log("[CutOne] Process button MOUSEUP!", e);
-            });
-            elements.processBtn.addEventListener("touchstart", function(e) {
-                console.log("[CutOne] Process button TOUCHSTART!", e);
-                processSequence();
-            });
-            console.log("[CutOne] processBtn listeners attached successfully");
+            console.log("[CutOne] processBtn listener attached successfully");
+        } else if (elements.processBtn && elements.processBtn._listenerAttached) {
+            console.log("[CutOne] processBtn listener already attached - skipping");
         } else {
             console.error("[CutOne] processBtn element not found!");
         }
-
-        // Fallback: Query the button again after a delay
-        setTimeout(function() {
-            const btn = document.getElementById("processBtn");
-            console.log("[CutOne] Delayed processBtn check:", btn);
-            if (btn && !btn._listenerAttached) {
-                btn._listenerAttached = true;
-                btn.addEventListener("click", function(e) {
-                    console.log("[CutOne] Delayed listener - Process button clicked!", e);
-                    processSequence();
-                });
-                // Add visual feedback listeners
-                btn.addEventListener("mouseenter", function() {
-                    console.log("[CutOne] MOUSEENTER on processBtn");
-                    btn.style.backgroundColor = "#ea580c";
-                    btn.style.transform = "scale(1.02)";
-                });
-                btn.addEventListener("mouseleave", function() {
-                    console.log("[CutOne] MOUSELEAVE on processBtn");
-                    btn.style.backgroundColor = "#f97316";
-                    btn.style.transform = "scale(1)";
-                });
-                console.log("[CutOne] Delayed listener attached to processBtn");
-            }
-        }, 1000);
 
         // Enter key on inputs
         elements.trialEmail.addEventListener("keypress", (e) => {
@@ -856,6 +818,15 @@
     // ============================================
     async function processSequence() {
         console.log("[CutOne] processSequence called");
+
+        // CRITICAL: Prevent multiple concurrent calls
+        if (isProcessing) {
+            console.log("[CutOne] Already processing - ignoring duplicate call!");
+            return;
+        }
+        isProcessing = true;
+        console.log("[CutOne] isProcessing set to true");
+
         console.log("[CutOne] currentSequence:", currentSequence);
 
         // Try to get sequence info if not available
@@ -868,6 +839,7 @@
         if (!currentSequence) {
             console.log("[CutOne] Still no sequence - showing error toast");
             showToast(I18n.t("msg.openSequence"), "error");
+            isProcessing = false;
             return;
         }
 
@@ -897,6 +869,8 @@
             });
 
             hideLoading();
+            isProcessing = false;
+            console.log("[CutOne] isProcessing set to false (success)");
 
             if (result && result.success) {
                 // Show results
@@ -935,6 +909,8 @@
             }
         } catch (e) {
             hideLoading();
+            isProcessing = false;
+            console.log("[CutOne] isProcessing set to false (error)");
             showToast(e.message || I18n.t("msg.error"), "error");
         }
     }
