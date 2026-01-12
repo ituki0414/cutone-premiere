@@ -355,24 +355,18 @@
     // ============================================
 
     async function refreshTranscriptionSequenceInfo() {
-        console.log("[CutOne] refreshTranscriptionSequenceInfo called");
         try {
             const result = await CEP.getActiveSequence();
-            console.log("[CutOne] getActiveSequence result:", JSON.stringify(result));
-
             if (result && result.success) {
                 currentSequence = result;
                 elements.transcriptionSequenceName.textContent = result.name;
                 elements.transcriptionSequenceDuration.textContent = result.durationFormatted;
-                console.log("[CutOne] Sequence loaded:", result.name);
             } else {
                 currentSequence = null;
                 elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
                 elements.transcriptionSequenceDuration.textContent = "--:--";
-                console.log("[CutOne] No sequence found:", result?.error || "unknown error");
             }
         } catch (e) {
-            currentSequence = null;
             console.error("[CutOne] Error getting sequence:", e);
         }
     }
