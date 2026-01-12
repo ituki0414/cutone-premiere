@@ -497,7 +497,7 @@ function processSegments(optionsJson) {
         var isLastBatch = options.isLastBatch || (totalBatches === 1);
         var isBatchMode = totalBatches > 1;
 
-        log("========== processSegments v19.0 (Batch Support) ==========");
+        log("========== processSegments v20.0 (disable/deleteKeepSpace) ==========");
         log("### CALL #" + callId + " | Batch " + (batchIndex + 1) + "/" + totalBatches + " ###");
 
         // Only apply duplicate protection for first batch or non-batch mode
@@ -568,6 +568,10 @@ function processSegments(optionsJson) {
         } else if (silenceAction === "keep") {
             addMarkersForSegments(sequence, segments);
             processedCount = segments.length;
+        } else if (silenceAction === "disable") {
+            processedCount = disableSegments(sequence, segments, paddingBefore, paddingAfter);
+        } else if (silenceAction === "deleteKeepSpace") {
+            processedCount = deleteSegmentsKeepSpace(sequence, segments, paddingBefore, paddingAfter);
         }
 
         var newDuration = getSequenceDuration(sequence);
@@ -744,6 +748,171 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
     log("Extract() calls: " + extractCallCount);
     log("Deleted: " + deletedCount + ", Skipped: " + skippedCount);
 
+    return deletedCount;
+}
+
+/**
+ * Disable (mute) segments without deleting them
+ * v20.0 - Split clips at segment boundaries and disable the silence parts
+ */
+function disableSegments(sequence, segments, paddingBefore, paddingAfter) {
+    log("=== disableSegments v20.0 ===");
+    log("Input segments count: " + segments.length);
+
+    // Sort segments by start time ascending
+    segments.sort(function(a, b) { return a.start - b.start; });
+
+    var disabledCount = 0;
+
+    // Get frame duration for alignment
+    var ticksPerFrame = TICKS_PER_SECOND / 30;
+    try {
+        var timebase = sequence.timebase;
+        if (timebase) {
+            ticksPerFrame = parseFloat(timebase);
+        }
+    } catch (e) {}
+
+    // Process each segment
+    for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+
+        // Apply padding
+        var cutStart = seg.start + paddingBefore;
+        var cutEnd = seg.end - paddingAfter;
+
+        if (cutEnd <= cutStart || (cutEnd - cutStart) < 0.1) {
+            log("Skip segment " + (i+1) + ": too short after padding");
+            continue;
+        }
+
+        // Align to frame boundary
+        var startTicks = Math.round(cutStart * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+        var endTicks = Math.round(cutEnd * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+
+        log("Disabling segment " + (i+1) + ": " + (startTicks/TICKS_PER_SECOND).toFixed(3) + "s - " + (endTicks/TICKS_PER_SECOND).toFixed(3) + "s");
+
+        // Find and disable clips that overlap with this segment
+        var disabled = disableClipsInRange(sequence, startTicks, endTicks);
+        if (disabled > 0) {
+            disabledCount++;
+        }
+    }
+
+    log("Disabled " + disabledCount + " segments");
+    return disabledCount;
+}
+
+/**
+ * Find clips in time range and disable them (audio only)
+ */
+function disableClipsInRange(sequence, startTicks, endTicks) {
+    var disabled = 0;
+    var tolerance = TICKS_PER_SECOND * 0.05;
+
+    // Process audio tracks only (we want to mute audio)
+    for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
+        var track = sequence.audioTracks[a];
+
+        for (var c = 0; c < track.clips.numItems; c++) {
+            var clip = track.clips[c];
+            if (!clip) continue;
+
+            var clipStart = getTicksNum(clip.start);
+            var clipEnd = getTicksNum(clip.end);
+
+            // Check if clip overlaps with the segment
+            if (clipEnd > startTicks && clipStart < endTicks) {
+                try {
+                    // Disable the clip (mute it)
+                    clip.disabled = true;
+                    log("  Disabled audio clip on track " + a + " at " + (clipStart/TICKS_PER_SECOND).toFixed(2) + "s");
+                    disabled++;
+                } catch (e) {
+                    log("  Error disabling clip: " + e.toString());
+                }
+            }
+        }
+    }
+
+    return disabled;
+}
+
+/**
+ * Delete segments but keep the space (no ripple)
+ * v20.0 - Uses lift instead of extract
+ */
+function deleteSegmentsKeepSpace(sequence, segments, paddingBefore, paddingAfter) {
+    log("=== deleteSegmentsKeepSpace v20.0 ===");
+    log("Input segments count: " + segments.length);
+
+    // Sort segments by start time descending (process from end first)
+    segments.sort(function(a, b) { return b.start - a.start; });
+
+    app.enableQE();
+    var qeSeq = qe.project.getActiveSequence();
+    if (!qeSeq) {
+        log("ERROR: No QE sequence");
+        return 0;
+    }
+
+    var deletedCount = 0;
+
+    // Get frame duration for alignment
+    var ticksPerFrame = TICKS_PER_SECOND / 30;
+    try {
+        var timebase = sequence.timebase;
+        if (timebase) {
+            ticksPerFrame = parseFloat(timebase);
+        }
+    } catch (e) {}
+
+    // Process each segment
+    for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+
+        // Apply padding
+        var cutStart = seg.start + paddingBefore;
+        var cutEnd = seg.end - paddingAfter;
+
+        if (cutEnd <= cutStart || (cutEnd - cutStart) < 0.1) {
+            log("Skip segment " + (i+1) + ": too short after padding");
+            continue;
+        }
+
+        // Align to frame boundary
+        var startTicks = Math.round(cutStart * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+        var endTicks = Math.round(cutEnd * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+        var alignedStart = startTicks / TICKS_PER_SECOND;
+        var alignedEnd = endTicks / TICKS_PER_SECOND;
+
+        log("Lift segment " + (i+1) + ": " + alignedStart.toFixed(3) + "s - " + alignedEnd.toFixed(3) + "s");
+
+        try {
+            // Set in/out points
+            sequence.setInPoint(alignedStart);
+            sequence.setOutPoint(alignedEnd);
+
+            // Use lift instead of extract (keeps the gap)
+            qeSeq.lift();
+            deletedCount++;
+
+            // Clear in/out points
+            try {
+                qeSeq.setInPoint("");
+                qeSeq.setOutPoint("");
+            } catch (e2) {}
+
+        } catch (e) {
+            log("  Error lifting segment: " + e.toString());
+            try {
+                qeSeq.setInPoint("");
+                qeSeq.setOutPoint("");
+            } catch (e2) {}
+        }
+    }
+
+    log("Lifted " + deletedCount + " segments (keeping space)");
     return deletedCount;
 }
 
