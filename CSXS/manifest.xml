@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExtensionManifest Version="7.0"
     ExtensionBundleId="com.cutone.premiere"
-    ExtensionBundleVersion="1.0.0"
+    ExtensionBundleVersion="2.0.0"
     ExtensionBundleName="CutOne">
 
     <ExtensionList>
-        <Extension Id="com.cutone.premiere.panel" Version="1.0.0"/>
+        <Extension Id="com.cutone.premiere.panel" Version="2.0.0"/>
     </ExtensionList>
 
     <ExecutionEnvironment>

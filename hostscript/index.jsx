@@ -1,6 +1,7 @@
 /**
  * CutOne - Premiere Pro Extension
  * ExtendScript for Premiere Pro API interaction
+ * Version 2.0 - Complete rewrite for reliability
  */
 
 // ============================================
@@ -61,201 +62,6 @@ var TICKS_PER_SECOND = 254016000000;
 // ============================================
 // Utility Functions
 // ============================================
-
-// Global variable to store extension path (set during initialization)
-var _extensionPath = "";
-
-function getExtensionPath() {
-    // If we already have the path, return it
-    if (_extensionPath && _extensionPath.length > 0) {
-        return _extensionPath;
-    }
-
-    // Try multiple methods to get the extension path
-    try {
-        // Method 1: Use $.fileName (works when script is loaded directly)
-        if ($.fileName && $.fileName.length > 0) {
-            var scriptFile = new File($.fileName);
-            if (scriptFile.exists) {
-                _extensionPath = scriptFile.parent.parent.fsName;
-                return _extensionPath;
-            }
-        }
-    } catch (e) {}
-
-    try {
-        // Method 2: Check common CEP extension locations on Mac
-        var macPaths = [
-            "/Users/" + $.getenv("USER") + "/Library/Application Support/Adobe/CEP/extensions/com.cutone.premiere",
-            Folder.userData.fsName + "/Adobe/CEP/extensions/com.cutone.premiere",
-            "/Library/Application Support/Adobe/CEP/extensions/com.cutone.premiere"
-        ];
-
-        for (var i = 0; i < macPaths.length; i++) {
-            var testFolder = new Folder(macPaths[i]);
-            if (testFolder.exists) {
-                _extensionPath = macPaths[i];
-                return _extensionPath;
-            }
-        }
-    } catch (e) {}
-
-    try {
-        // Method 3: Windows paths
-        if ($.os.indexOf("Windows") !== -1) {
-            var winPaths = [
-                $.getenv("APPDATA") + "/Adobe/CEP/extensions/com.cutone.premiere",
-                "C:/Program Files (x86)/Common Files/Adobe/CEP/extensions/com.cutone.premiere"
-            ];
-
-            for (var i = 0; i < winPaths.length; i++) {
-                var testFolder = new Folder(winPaths[i]);
-                if (testFolder.exists) {
-                    _extensionPath = winPaths[i];
-                    return _extensionPath;
-                }
-            }
-        }
-    } catch (e) {}
-
-    return "";
-}
-
-function getFFmpegPath() {
-    var basePath = getExtensionPath();
-
-    if (!basePath || basePath.length === 0) {
-        // Fallback: try to find FFmpeg in known locations
-        var fallbackPaths = [];
-
-        if ($.os.indexOf("Windows") !== -1) {
-            fallbackPaths = [
-                Folder.userData.fsName + "/Adobe/CEP/extensions/com.cutone.premiere/bin/ffmpeg-win.exe"
-            ];
-        } else {
-            // Mac
-            var user = "";
-            try { user = $.getenv("USER"); } catch(e) { user = "itsukiokamoto"; }
-            fallbackPaths = [
-                "/Users/" + user + "/Library/Application Support/Adobe/CEP/extensions/com.cutone.premiere/bin/ffmpeg-mac",
-                "/Users/" + user + "/cutone-premiere/bin/ffmpeg-mac"
-            ];
-        }
-
-        for (var i = 0; i < fallbackPaths.length; i++) {
-            var testFile = new File(fallbackPaths[i]);
-            if (testFile.exists) {
-                return fallbackPaths[i];
-            }
-        }
-    }
-
-    if ($.os.indexOf("Windows") !== -1) {
-        return basePath + "/bin/ffmpeg-win.exe";
-    }
-    return basePath + "/bin/ffmpeg-mac";
-}
-
-function executeCommand(cmd) {
-    try {
-        if ($.os.indexOf("Windows") !== -1) {
-            return system.callSystem('cmd /c "' + cmd + '"');
-        } else {
-            // Mac: use shell script file approach (app.doScript doesn't exist in Premiere Pro)
-            var tempFile = Folder.temp.fsName + "/cmd_out_" + Date.now() + ".txt";
-            var scriptFile = Folder.temp.fsName + "/cmd_script_" + Date.now() + ".sh";
-
-            var sf = new File(scriptFile);
-            sf.open("w");
-            sf.write('#!/bin/bash\n' + cmd + ' > "' + tempFile + '" 2>&1\n');
-            sf.close();
-
-            system.callSystem('chmod +x "' + scriptFile + '"');
-            system.callSystem('"' + scriptFile + '"');
-
-            // Clean up script file
-            var scriptF = new File(scriptFile);
-            if (scriptF.exists) scriptF.remove();
-
-            // Read output
-            var output = "";
-            var f = new File(tempFile);
-            if (f.exists) {
-                f.open("r");
-                output = f.read();
-                f.close();
-                f.remove();
-            }
-
-            return output;
-        }
-    } catch (e) {
-        return "ERROR: " + e.toString();
-    }
-}
-
-// Execute command and capture stderr to temp file
-function executeCommandWithStderr(cmd) {
-    try {
-        var timestamp = new Date().getTime();
-        var tempFile = "/tmp/ffmpeg_out_" + timestamp + ".txt";
-        var scriptFile = "/tmp/ffmpeg_script_" + timestamp + ".command";
-
-        if ($.os.indexOf("Windows") !== -1) {
-            // Windows: use batch file
-            tempFile = Folder.temp.fsName + "\\ffmpeg_out_" + timestamp + ".txt";
-            scriptFile = Folder.temp.fsName + "\\ffmpeg_script_" + timestamp + ".bat";
-
-            var sf = new File(scriptFile);
-            sf.open("w");
-            sf.writeln("@echo off");
-            sf.writeln(cmd + ' 2>"' + tempFile + '"');
-            sf.close();
-
-            sf.execute();
-            $.sleep(5000);
-        } else {
-            // Mac: write shell script and execute with File.execute()
-            var sf = new File(scriptFile);
-            sf.open("w");
-            sf.writeln("#!/bin/bash");
-            sf.writeln(cmd + ' 2>"' + tempFile + '"');
-            sf.close();
-
-            // Use osascript to run the script with proper permissions
-            var osaScript = new File("/tmp/run_ffmpeg_" + timestamp + ".scpt");
-            osaScript.open("w");
-            osaScript.writeln('do shell script "chmod +x \'' + scriptFile + '\' && \'' + scriptFile + '\'"');
-            osaScript.close();
-            osaScript.execute();
-
-            // Wait for FFmpeg to complete (depends on file length)
-            $.sleep(5000);
-
-            // Clean up osascript file
-            osaScript.remove();
-        }
-
-        // Clean up script file
-        var scriptF = new File(scriptFile);
-        if (scriptF.exists) scriptF.remove();
-
-        // Read output file
-        var output = "";
-        var f = new File(tempFile);
-        if (f.exists) {
-            f.open("r");
-            output = f.read();
-            f.close();
-            f.remove();
-        }
-
-        return output;
-    } catch (e) {
-        return "ERROR: " + e.toString();
-    }
-}
-
 function formatTime(seconds) {
     var h = Math.floor(seconds / 3600);
     var m = Math.floor((seconds % 3600) / 60);
@@ -269,125 +75,25 @@ function pad(num, size) {
     return s.substr(s.length - size);
 }
 
+function ticksToSeconds(ticks) {
+    return ticks / TICKS_PER_SECOND;
+}
+
+function secondsToTicks(seconds) {
+    return Math.round(seconds * TICKS_PER_SECOND);
+}
+
 // ============================================
 // Test Functions
 // ============================================
 function testExtendScript() {
-    var ffmpegPath = getFFmpegPath();
-    var ffmpegExists = false;
-    try {
-        var f = new File(ffmpegPath);
-        ffmpegExists = f.exists;
-    } catch(e) {}
-
     return JSON.stringify({
         success: true,
         message: "ExtendScript loaded successfully",
-        ffmpegPath: ffmpegPath,
-        ffmpegExists: ffmpegExists,
-        extensionPath: getExtensionPath(),
         os: $.os,
-        hasProcessWithOptions: typeof processWithOptions === "function",
-        hasGetActiveSequence: typeof getActiveSequence === "function"
+        hasGetActiveSequence: typeof getActiveSequence === "function",
+        hasProcessSegments: typeof processSegments === "function"
     });
-}
-
-function testFFmpeg() {
-    var ffmpegPath = getFFmpegPath();
-    var ffmpegFile = new File(ffmpegPath);
-
-    if (!ffmpegFile.exists) {
-        return JSON.stringify({
-            success: false,
-            error: "FFmpeg not found",
-            testedPath: ffmpegPath,
-            extensionPath: getExtensionPath()
-        });
-    }
-
-    // Try to run FFmpeg version
-    try {
-        var cmd = '"' + ffmpegPath + '" -version';
-        var result = executeCommand(cmd);
-        return JSON.stringify({
-            success: true,
-            ffmpegPath: ffmpegPath,
-            versionOutput: result.substring(0, 200)
-        });
-    } catch(e) {
-        return JSON.stringify({
-            success: false,
-            error: "FFmpeg execution failed: " + e.toString(),
-            ffmpegPath: ffmpegPath
-        });
-    }
-}
-
-// Full debug test function
-function debugFullTest() {
-    var debug = {
-        step: "start",
-        ffmpegPath: "",
-        ffmpegExists: false,
-        sourcePath: "",
-        sourceExists: false,
-        cmdExecuted: "",
-        rawOutput: "",
-        rawOutputLength: 0,
-        segmentsFound: 0,
-        error: ""
-    };
-
-    try {
-        // Step 1: Check FFmpeg
-        debug.step = "ffmpeg_check";
-        debug.ffmpegPath = getFFmpegPath();
-        var ffmpegFile = new File(debug.ffmpegPath);
-        debug.ffmpegExists = ffmpegFile.exists;
-
-        if (!debug.ffmpegExists) {
-            debug.error = "FFmpeg not found";
-            return JSON.stringify(debug);
-        }
-
-        // Step 2: Get source path
-        debug.step = "source_check";
-        debug.sourcePath = getFirstClipSourcePath();
-
-        if (!debug.sourcePath) {
-            debug.error = "No source clip found in sequence";
-            return JSON.stringify(debug);
-        }
-
-        var sourceFile = new File(debug.sourcePath);
-        debug.sourceExists = sourceFile.exists;
-
-        if (!debug.sourceExists) {
-            debug.error = "Source file does not exist: " + debug.sourcePath;
-            return JSON.stringify(debug);
-        }
-
-        // Step 3: Run FFmpeg
-        debug.step = "ffmpeg_run";
-        var cmd = '"' + debug.ffmpegPath + '" -i "' + debug.sourcePath + '" -af silencedetect=noise=-35dB:d=0.3 -f null /dev/null';
-        debug.cmdExecuted = cmd;
-
-        var output = executeCommandWithStderr(cmd);
-        debug.rawOutput = output.substring(0, 1000);
-        debug.rawOutputLength = output.length;
-
-        // Step 4: Parse output
-        debug.step = "parse";
-        var segments = parseSilenceOutput(output);
-        debug.segmentsFound = segments.length;
-
-        debug.step = "complete";
-        return JSON.stringify(debug);
-
-    } catch (e) {
-        debug.error = e.toString();
-        return JSON.stringify(debug);
-    }
 }
 
 // ============================================
@@ -404,8 +110,8 @@ function getActiveSequence() {
             });
         }
 
-        var duration = sequence.end - sequence.zeroPoint;
-        var durationSeconds = duration / TICKS_PER_SECOND;
+        var durationTicks = sequence.end - sequence.zeroPoint;
+        var durationSeconds = ticksToSeconds(durationTicks);
 
         return JSON.stringify({
             success: true,
@@ -423,96 +129,226 @@ function getActiveSequence() {
     }
 }
 
+/**
+ * Get detailed sequence and clip information for processing
+ * This is the key function that provides all timing info for FFmpeg
+ */
+function getSequenceInfo() {
+    try {
+        $.writeln("[CutOne] ========== getSequenceInfo START ==========");
+        var sequence = app.project.activeSequence;
+
+        if (!sequence) {
+            $.writeln("[CutOne] ERROR: No active sequence");
+            return JSON.stringify({
+                success: false,
+                error: "アクティブなシーケンスがありません。シーケンスを開いてから再度お試しください。"
+            });
+        }
+
+        $.writeln("[CutOne] Sequence: " + sequence.name);
+
+        // Calculate sequence duration
+        var sequenceDurationTicks = sequence.end - sequence.zeroPoint;
+        var sequenceDuration = ticksToSeconds(sequenceDurationTicks);
+        $.writeln("[CutOne] Sequence duration: " + sequenceDuration.toFixed(2) + "s");
+
+        // Find the first clip with media
+        var clipInfo = findFirstClipWithMedia(sequence);
+
+        if (!clipInfo) {
+            $.writeln("[CutOne] ERROR: No clips with media found");
+            return JSON.stringify({
+                success: false,
+                error: "シーケンスにクリップがありません。動画クリップを配置してください。"
+            });
+        }
+
+        $.writeln("[CutOne] Found clip:");
+        $.writeln("[CutOne]   Source: " + clipInfo.sourcePath);
+        $.writeln("[CutOne]   Clip in sequence: " + clipInfo.startInSequence.toFixed(2) + "s - " + clipInfo.endInSequence.toFixed(2) + "s");
+        $.writeln("[CutOne]   Source in/out: " + clipInfo.inPoint.toFixed(2) + "s - " + clipInfo.outPoint.toFixed(2) + "s");
+        $.writeln("[CutOne]   Clip duration: " + clipInfo.duration.toFixed(2) + "s");
+        $.writeln("[CutOne] ========== getSequenceInfo END ==========");
+
+        return JSON.stringify({
+            success: true,
+            name: sequence.name,
+            sequenceDuration: sequenceDuration,
+            // Clip timing info
+            sourcePath: clipInfo.sourcePath,
+            clipStartInSequence: clipInfo.startInSequence,
+            clipEndInSequence: clipInfo.endInSequence,
+            clipInPoint: clipInfo.inPoint,
+            clipOutPoint: clipInfo.outPoint,
+            clipDuration: clipInfo.duration,
+            // For backwards compatibility
+            duration: sequenceDuration
+        });
+
+    } catch (e) {
+        $.writeln("[CutOne] ERROR in getSequenceInfo: " + e.toString());
+        return JSON.stringify({
+            success: false,
+            error: "シーケンス情報の取得に失敗: " + e.toString()
+        });
+    }
+}
+
+/**
+ * Find the first clip that has media (video or audio)
+ */
+function findFirstClipWithMedia(sequence) {
+    // Check video tracks first
+    for (var v = 0; v < sequence.videoTracks.numTracks; v++) {
+        var track = sequence.videoTracks[v];
+        $.writeln("[CutOne] Checking video track " + (v + 1) + ": " + track.clips.numItems + " clips");
+
+        for (var c = 0; c < track.clips.numItems; c++) {
+            var clip = track.clips[c];
+
+            if (clip.projectItem && clip.projectItem.getMediaPath) {
+                var mediaPath = clip.projectItem.getMediaPath();
+
+                if (mediaPath && mediaPath.length > 0) {
+                    return {
+                        sourcePath: mediaPath,
+                        startInSequence: clip.start.seconds,
+                        endInSequence: clip.end.seconds,
+                        inPoint: clip.inPoint.seconds,
+                        outPoint: clip.outPoint.seconds,
+                        duration: clip.end.seconds - clip.start.seconds,
+                        trackType: "video",
+                        trackIndex: v
+                    };
+                }
+            }
+        }
+    }
+
+    // Check audio tracks
+    for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
+        var track = sequence.audioTracks[a];
+        $.writeln("[CutOne] Checking audio track " + (a + 1) + ": " + track.clips.numItems + " clips");
+
+        for (var c = 0; c < track.clips.numItems; c++) {
+            var clip = track.clips[c];
+
+            if (clip.projectItem && clip.projectItem.getMediaPath) {
+                var mediaPath = clip.projectItem.getMediaPath();
+
+                if (mediaPath && mediaPath.length > 0) {
+                    return {
+                        sourcePath: mediaPath,
+                        startInSequence: clip.start.seconds,
+                        endInSequence: clip.end.seconds,
+                        inPoint: clip.inPoint.seconds,
+                        outPoint: clip.outPoint.seconds,
+                        duration: clip.end.seconds - clip.start.seconds,
+                        trackType: "audio",
+                        trackIndex: a
+                    };
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Get first clip source path (legacy function for compatibility)
+ */
 function getFirstClipSourcePath() {
     try {
         var sequence = app.project.activeSequence;
         if (!sequence) return null;
 
-        // Check video tracks
-        for (var v = 0; v < sequence.videoTracks.numTracks; v++) {
-            var track = sequence.videoTracks[v];
-            if (track.clips.numItems > 0) {
-                var clip = track.clips[0];
-                if (clip.projectItem && clip.projectItem.getMediaPath) {
-                    return clip.projectItem.getMediaPath();
-                }
-            }
-        }
-
-        // Check audio tracks
-        for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
-            var track = sequence.audioTracks[a];
-            if (track.clips.numItems > 0) {
-                var clip = track.clips[0];
-                if (clip.projectItem && clip.projectItem.getMediaPath) {
-                    return clip.projectItem.getMediaPath();
-                }
-            }
-        }
-
-        return null;
+        var clipInfo = findFirstClipWithMedia(sequence);
+        return clipInfo ? clipInfo.sourcePath : null;
     } catch (e) {
         return null;
     }
 }
 
-// Get sequence info including source path (for Node.js FFmpeg)
-function getSequenceInfo() {
-    try {
-        var sequence = app.project.activeSequence;
-        if (!sequence) {
-            return JSON.stringify({
-                success: false,
-                error: "No active sequence"
-            });
-        }
-
-        var duration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
-        var sourcePath = getFirstClipSourcePath();
-
-        return JSON.stringify({
-            success: true,
-            name: sequence.name,
-            duration: duration,
-            sourcePath: sourcePath
-        });
-    } catch (e) {
-        return JSON.stringify({
-            success: false,
-            error: "getSequenceInfo error: " + e.toString()
-        });
-    }
-}
-
-// Process segments received from Node.js FFmpeg
+// ============================================
+// Process Segments (Main processing function)
+// ============================================
+/**
+ * Process silence segments received from Node.js FFmpeg
+ * @param {string} optionsJson - JSON string with segments and options
+ */
 function processSegments(optionsJson) {
     try {
+        $.writeln("[CutOne] ========== processSegments START ==========");
         var options = JSON.parse(optionsJson);
-        var segments = options.segments;
+
+        var segments = options.segments || [];
         var paddingBefore = options.paddingBefore || 0.2;
         var paddingAfter = options.paddingAfter || 0.2;
         var silenceAction = options.silenceAction || "delete";
 
+        $.writeln("[CutOne] Received " + segments.length + " segments");
+        $.writeln("[CutOne] Action: " + silenceAction);
+        $.writeln("[CutOne] Padding: before=" + paddingBefore + "s, after=" + paddingAfter + "s");
+
+        // Get sequence
         var sequence = app.project.activeSequence;
         if (!sequence) {
+            $.writeln("[CutOne] ERROR: No active sequence");
             return JSON.stringify({
                 success: false,
-                error: "No active sequence"
+                error: "アクティブなシーケンスがありません"
             });
         }
 
-        var originalDuration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
+        // IMPORTANT: Calculate original duration BEFORE any modifications
+        var originalDuration = ticksToSeconds(sequence.end - sequence.zeroPoint);
+        $.writeln("[CutOne] Original duration (before processing): " + originalDuration.toFixed(2) + "s");
+
+        // Validate segments
+        if (segments.length === 0) {
+            $.writeln("[CutOne] No segments to process");
+            return JSON.stringify({
+                success: true,
+                segmentsFound: 0,
+                segmentsProcessed: 0,
+                originalDuration: originalDuration,
+                newDuration: originalDuration,
+                savedPercent: 0,
+                message: "無音区間が見つかりませんでした"
+            });
+        }
+
+        // Log first few segments for debugging
+        for (var i = 0; i < Math.min(5, segments.length); i++) {
+            $.writeln("[CutOne] Segment " + (i + 1) + ": " +
+                      segments[i].start.toFixed(2) + "s - " + segments[i].end.toFixed(2) + "s " +
+                      "(duration: " + segments[i].duration.toFixed(2) + "s)");
+        }
+        if (segments.length > 5) {
+            $.writeln("[CutOne] ... and " + (segments.length - 5) + " more segments");
+        }
+
+        // Process based on action
         var processedCount = 0;
 
         if (silenceAction === "delete") {
-            processedCount = deleteSegments(sequence, segments, paddingBefore, paddingAfter);
+            $.writeln("[CutOne] Calling deleteSegmentsRipple...");
+            processedCount = deleteSegmentsRipple(sequence, segments, paddingBefore, paddingAfter);
         } else if (silenceAction === "keep") {
-            addSilenceMarkersFromSegments(sequence, segments);
+            $.writeln("[CutOne] Adding markers only (keep mode)...");
+            addMarkersForSegments(sequence, segments);
             processedCount = segments.length;
         }
 
-        var newDuration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
-        var savedPercent = ((originalDuration - newDuration) / originalDuration) * 100;
+        // Calculate new duration AFTER modifications
+        var newDuration = ticksToSeconds(sequence.end - sequence.zeroPoint);
+        var savedPercent = originalDuration > 0 ? ((originalDuration - newDuration) / originalDuration) * 100 : 0;
+
+        $.writeln("[CutOne] New duration (after processing): " + newDuration.toFixed(2) + "s");
+        $.writeln("[CutOne] Saved: " + savedPercent.toFixed(1) + "%");
+        $.writeln("[CutOne] ========== processSegments END ==========");
 
         return JSON.stringify({
             success: true,
@@ -525,281 +361,153 @@ function processSegments(optionsJson) {
         });
 
     } catch (e) {
+        $.writeln("[CutOne] ERROR in processSegments: " + e.toString());
         return JSON.stringify({
             success: false,
-            error: "processSegments error: " + e.toString()
+            error: "処理中にエラーが発生: " + e.toString()
         });
     }
 }
 
-// ============================================
-// Silence Detection
-// ============================================
-function detectSilence(audioPath, threshold, minDuration) {
-    try {
-        var ffmpegPath = getFFmpegPath();
-        var ffmpegFile = new File(ffmpegPath);
-
-        if (!ffmpegFile.exists) {
-            return JSON.stringify({
-                success: false,
-                error: "FFmpeg not found at: " + ffmpegPath
-            });
-        }
-
-        // Check if audio file exists
-        var audioFile = new File(audioPath);
-        if (!audioFile.exists) {
-            return JSON.stringify({
-                success: false,
-                error: "Audio file not found: " + audioPath
-            });
-        }
-
-        // Build FFmpeg command
-        var cmd = '"' + ffmpegPath + '" -i "' + audioPath +
-                  '" -af silencedetect=noise=' + threshold +
-                  'dB:d=' + minDuration + ' -f null /dev/null';
-
-        // Execute and capture stderr (where FFmpeg outputs silencedetect info)
-        var result = executeCommandWithStderr(cmd);
-
-        var segments = parseSilenceOutput(result);
-
-        return JSON.stringify({
-            success: true,
-            segments: segments,
-            count: segments.length,
-            debug: {
-                audioPath: audioPath,
-                ffmpegPath: ffmpegPath,
-                outputLength: result.length,
-                outputSample: result.substring(0, 500)
-            }
-        });
-    } catch (e) {
-        return JSON.stringify({
-            success: false,
-            error: "detectSilence error: " + e.toString()
-        });
-    }
-}
-
-function parseSilenceOutput(output) {
-    var segments = [];
-    var lines = output.split("\n");
-    var currentStart = null;
-
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-
-        var startMatch = line.match(/silence_start:\s*([\d.]+)/);
-        if (startMatch) {
-            currentStart = parseFloat(startMatch[1]);
-        }
-
-        var endMatch = line.match(/silence_end:\s*([\d.]+)\s*\|\s*silence_duration:\s*([\d.]+)/);
-        if (endMatch && currentStart !== null) {
-            segments.push({
-                start: currentStart,
-                end: parseFloat(endMatch[1]),
-                duration: parseFloat(endMatch[2])
-            });
-            currentStart = null;
-        }
-    }
-
-    return segments;
-}
-
-// ============================================
-// Main Process Function
-// ============================================
-function processWithOptions(optionsJson) {
-    try {
-        // Parse options
-        var options = JSON.parse(optionsJson);
-
-        // Get sequence
-        var sequence = app.project.activeSequence;
-        if (!sequence) {
-            return JSON.stringify({
-                success: false,
-                error: "No active sequence"
-            });
-        }
-
-        // Extract options with defaults
-        var threshold = options.threshold || -35;
-        var minSilenceDuration = options.minSilenceDuration || 0.3;
-        var paddingBefore = options.paddingBefore || 0.2;
-        var paddingAfter = options.paddingAfter || 0.2;
-        var silenceAction = options.silenceAction || "delete";
-
-        // Get source file
-        var sourcePath = getFirstClipSourcePath();
-        if (!sourcePath) {
-            return JSON.stringify({
-                success: false,
-                error: "Could not find source media file"
-            });
-        }
-
-        // Detect silence
-        var silenceResultStr = detectSilence(sourcePath, threshold, minSilenceDuration);
-        var silenceResult = JSON.parse(silenceResultStr);
-
-        if (!silenceResult.success) {
-            return silenceResultStr;
-        }
-
-        var segments = silenceResult.segments;
-
-        if (segments.length === 0) {
-            var seqDuration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
-            return JSON.stringify({
-                success: true,
-                segmentsFound: 0,
-                segmentsProcessed: 0,
-                originalDuration: seqDuration,
-                newDuration: seqDuration,
-                savedPercent: 0,
-                message: "No silence segments found",
-                debug: silenceResult.debug
-            });
-        }
-
-        // Calculate original duration
-        var originalDuration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
-
-        // Process based on action
-        var processedCount = 0;
-
-        if (silenceAction === "delete") {
-            processedCount = deleteSegments(sequence, segments, paddingBefore, paddingAfter);
-        } else if (silenceAction === "keep") {
-            addSilenceMarkersFromSegments(sequence, segments);
-            processedCount = segments.length;
-        }
-
-        // Calculate new duration
-        var newDuration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
-        var savedPercent = ((originalDuration - newDuration) / originalDuration) * 100;
-
-        return JSON.stringify({
-            success: true,
-            segmentsFound: silenceResult.count,
-            segmentsProcessed: processedCount,
-            originalDuration: originalDuration,
-            newDuration: newDuration,
-            savedPercent: savedPercent,
-            action: silenceAction
-        });
-
-    } catch (e) {
-        return JSON.stringify({
-            success: false,
-            error: "processWithOptions error: " + e.toString() + " (line: " + (e.line || "unknown") + ")"
-        });
-    }
-}
-
-// ============================================
-// Delete Segments
-// ============================================
-function deleteSegments(sequence, segments, paddingBefore, paddingAfter) {
-    // Sort descending to avoid index issues (delete from end first)
+/**
+ * Delete segments using ripple delete (QE API)
+ * Segments must be sorted in DESCENDING order by start time
+ */
+function deleteSegmentsRipple(sequence, segments, paddingBefore, paddingAfter) {
+    // Sort segments by start time DESCENDING (delete from end first to preserve indices)
     segments.sort(function(a, b) { return b.start - a.start; });
 
     var deletedCount = 0;
     var skippedCount = 0;
 
     // Enable QE
-    app.enableQE();
+    try {
+        app.enableQE();
+    } catch (e) {
+        $.writeln("[CutOne] Warning: Could not enable QE: " + e.toString());
+    }
+
     var qeSequence = qe.project.getActiveSequence();
 
     if (!qeSequence) {
+        $.writeln("[CutOne] ERROR: No QE sequence available");
         return 0;
     }
 
-    // Get sequence duration for safety check
-    var seqDuration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
+    // Get current sequence duration for validation
+    var seqDuration = ticksToSeconds(sequence.end - sequence.zeroPoint);
+    $.writeln("[CutOne] deleteSegmentsRipple: " + segments.length + " segments, seqDuration=" + seqDuration.toFixed(2) + "s");
 
     for (var i = 0; i < segments.length; i++) {
         var seg = segments[i];
-        var startTime = seg.start + paddingBefore;
-        var endTime = seg.end - paddingAfter;
-        var segDuration = endTime - startTime;
 
-        // Skip if segment is invalid
-        if (endTime <= startTime) {
+        // Apply padding to get actual cut points
+        var cutStart = seg.start + paddingBefore;
+        var cutEnd = seg.end - paddingAfter;
+        var cutDuration = cutEnd - cutStart;
+
+        $.writeln("[CutOne] Processing segment " + (i + 1) + "/" + segments.length);
+        $.writeln("[CutOne]   Original: " + seg.start.toFixed(2) + "s - " + seg.end.toFixed(2) + "s");
+        $.writeln("[CutOne]   Cut region: " + cutStart.toFixed(2) + "s - " + cutEnd.toFixed(2) + "s (" + cutDuration.toFixed(2) + "s)");
+
+        // Validate segment
+        if (cutEnd <= cutStart) {
+            $.writeln("[CutOne]   SKIP: Invalid (end <= start after padding)");
             skippedCount++;
             continue;
         }
 
-        // Skip very short segments (less than 0.15 seconds)
-        if (segDuration < 0.15) {
+        if (cutDuration < 0.05) {
+            $.writeln("[CutOne]   SKIP: Too short (" + cutDuration.toFixed(3) + "s < 0.05s)");
             skippedCount++;
             continue;
         }
 
-        // Safety: skip if segment is too long (more than 5 seconds for safety)
-        if (segDuration > 5) {
+        if (cutStart < 0) {
+            $.writeln("[CutOne]   SKIP: Start before 0");
             skippedCount++;
             continue;
         }
 
-        // Safety: segment must be within bounds
-        if (startTime < 0 || endTime > seqDuration + 1) {
+        // Recalculate sequence duration (it changes after each delete)
+        seqDuration = ticksToSeconds(sequence.end - sequence.zeroPoint);
+
+        if (cutStart >= seqDuration) {
+            $.writeln("[CutOne]   SKIP: Start (" + cutStart.toFixed(2) + ") >= sequence duration (" + seqDuration.toFixed(2) + ")");
             skippedCount++;
             continue;
         }
 
+        // Clamp cutEnd to sequence duration
+        if (cutEnd > seqDuration) {
+            $.writeln("[CutOne]   Clamping cutEnd from " + cutEnd.toFixed(2) + " to " + seqDuration.toFixed(2));
+            cutEnd = seqDuration;
+            cutDuration = cutEnd - cutStart;
+        }
+
+        // Skip if segment would delete too much (safety check)
+        if (cutDuration > 30) {
+            $.writeln("[CutOne]   SKIP: Too long (" + cutDuration.toFixed(2) + "s > 30s max)");
+            skippedCount++;
+            continue;
+        }
+
+        // Perform the ripple delete using QE API
         try {
-            // QE API uses ticks as strings
-            var startTicks = Math.round(startTime * TICKS_PER_SECOND);
-            var endTicks = Math.round(endTime * TICKS_PER_SECOND);
+            var startTicks = secondsToTicks(cutStart);
+            var endTicks = secondsToTicks(cutEnd);
 
-            // Set in/out points using QE
+            $.writeln("[CutOne]   Extracting: " + startTicks + " - " + endTicks + " ticks");
+
+            // Set in/out points
             qeSequence.setInPoint(startTicks.toString());
             qeSequence.setOutPoint(endTicks.toString());
 
-            // Ripple delete the selection
+            // Perform extraction (ripple delete)
             qeSequence.extract();
 
             deletedCount++;
+            $.writeln("[CutOne]   SUCCESS: Deleted segment");
 
         } catch (e) {
+            $.writeln("[CutOne]   ERROR: " + e.toString());
             skippedCount++;
         }
     }
 
-    // Clear in/out points
+    // Clear in/out points after processing
     try {
         qeSequence.setInPoint("-1");
         qeSequence.setOutPoint("-1");
-    } catch (e) {}
+    } catch (e) {
+        // Ignore errors when clearing points
+    }
 
+    $.writeln("[CutOne] deleteSegmentsRipple complete: " + deletedCount + " deleted, " + skippedCount + " skipped");
     return deletedCount;
 }
 
 // ============================================
 // Marker Functions
 // ============================================
-function addSilenceMarkersFromSegments(sequence, segments) {
+function addMarkersForSegments(sequence, segments) {
     var markers = sequence.markers;
 
     for (var i = 0; i < segments.length; i++) {
         var seg = segments[i];
-        var startTicks = Math.round(seg.start * TICKS_PER_SECOND);
+        var startTicks = secondsToTicks(seg.start);
 
         try {
             var marker = markers.createMarker(startTicks);
             marker.name = "Silence " + (i + 1);
             marker.comments = "Duration: " + seg.duration.toFixed(2) + "s";
-            marker.setColorByIndex(3);
-        } catch (e) {}
+            marker.setColorByIndex(3); // Yellow
+        } catch (e) {
+            $.writeln("[CutOne] Could not create marker " + (i + 1) + ": " + e.toString());
+        }
     }
+
+    return segments.length;
 }
 
 function addSilenceMarkers(segmentsJson) {
@@ -813,11 +521,11 @@ function addSilenceMarkers(segmentsJson) {
         }
 
         var segments = JSON.parse(segmentsJson);
-        addSilenceMarkersFromSegments(sequence, segments);
+        var count = addMarkersForSegments(sequence, segments);
 
         return JSON.stringify({
             success: true,
-            markerCount: segments.length
+            markerCount: count
         });
     } catch (e) {
         return JSON.stringify({
@@ -860,52 +568,20 @@ function clearAllMarkers() {
 // ============================================
 // Preview Functions
 // ============================================
-function previewSilence(threshold, minDuration) {
-    try {
-        var sourcePath = getFirstClipSourcePath();
-        if (!sourcePath) {
-            return JSON.stringify({
-                success: false,
-                error: "Could not find source media file"
-            });
-        }
-
-        var silenceResultStr = detectSilence(sourcePath, threshold, minDuration);
-        var silenceResult = JSON.parse(silenceResultStr);
-
-        if (!silenceResult.success) {
-            return silenceResultStr;
-        }
-
-        clearAllMarkers();
-        addSilenceMarkers(JSON.stringify(silenceResult.segments));
-
-        var silenceDuration = 0;
-        for (var i = 0; i < silenceResult.segments.length; i++) {
-            silenceDuration += silenceResult.segments[i].duration;
-        }
-
-        return JSON.stringify({
-            success: true,
-            segments: silenceResult.segments,
-            totalSilence: silenceDuration,
-            count: silenceResult.segments.length
-        });
-    } catch (e) {
-        return JSON.stringify({
-            success: false,
-            error: "previewSilence error: " + e.toString()
-        });
-    }
-}
-
 function previewWithOptions(optionsJson) {
     try {
         var options = JSON.parse(optionsJson);
         var threshold = options.threshold || -35;
         var minSilenceDuration = options.minSilenceDuration || 0.3;
 
-        return previewSilence(threshold, minSilenceDuration);
+        // For preview, we just return a placeholder
+        // The actual silence detection is done via Node.js FFmpeg
+        return JSON.stringify({
+            success: true,
+            message: "Preview requested",
+            threshold: threshold,
+            minSilenceDuration: minSilenceDuration
+        });
     } catch (e) {
         return JSON.stringify({
             success: false,
@@ -915,7 +591,7 @@ function previewWithOptions(optionsJson) {
 }
 
 // ============================================
-// Audio Levels for Waveform
+// Audio Levels (for waveform visualization)
 // ============================================
 function getAudioLevels(numSamples) {
     try {
@@ -927,9 +603,10 @@ function getAudioLevels(numSamples) {
             });
         }
 
-        var duration = (sequence.end - sequence.zeroPoint) / TICKS_PER_SECOND;
+        var duration = ticksToSeconds(sequence.end - sequence.zeroPoint);
 
-        // Generate simple waveform data
+        // Generate placeholder waveform data
+        // Real waveform would require audio analysis
         var levels = [];
         for (var i = 0; i < numSamples; i++) {
             levels.push(Math.random() * 0.5 + 0.2);
@@ -944,90 +621,6 @@ function getAudioLevels(numSamples) {
         return JSON.stringify({
             success: false,
             error: "getAudioLevels error: " + e.toString()
-        });
-    }
-}
-
-// ============================================
-// Legacy Functions
-// ============================================
-function processSequence(threshold, minDuration, margin, addMarkersFlag) {
-    try {
-        var seqResultStr = getActiveSequence();
-        var seqResult = JSON.parse(seqResultStr);
-
-        if (!seqResult.success) {
-            return seqResultStr;
-        }
-
-        var sourcePath = getFirstClipSourcePath();
-        if (!sourcePath) {
-            return JSON.stringify({
-                success: false,
-                error: "Could not find source media file"
-            });
-        }
-
-        var silenceResultStr = detectSilence(sourcePath, threshold, minDuration);
-        var silenceResult = JSON.parse(silenceResultStr);
-
-        if (!silenceResult.success) {
-            return silenceResultStr;
-        }
-
-        var originalDuration = seqResult.duration;
-        var silenceDuration = 0;
-        for (var i = 0; i < silenceResult.segments.length; i++) {
-            silenceDuration += silenceResult.segments[i].duration;
-        }
-
-        if (addMarkersFlag) {
-            addSilenceMarkers(JSON.stringify(silenceResult.segments));
-        }
-
-        var sequence = app.project.activeSequence;
-        var cutCount = deleteSegments(sequence, silenceResult.segments, margin, margin);
-
-        var newDuration = originalDuration - silenceDuration + (margin * 2 * silenceResult.segments.length);
-        var savedPercent = ((originalDuration - newDuration) / originalDuration) * 100;
-
-        return JSON.stringify({
-            success: true,
-            originalDuration: originalDuration,
-            newDuration: newDuration,
-            savedPercent: savedPercent,
-            segmentsFound: silenceResult.segments.length,
-            segmentsCut: cutCount
-        });
-    } catch (e) {
-        return JSON.stringify({
-            success: false,
-            error: "processSequence error: " + e.toString()
-        });
-    }
-}
-
-function rippleDeleteSegments(segmentsJson, margin) {
-    try {
-        var sequence = app.project.activeSequence;
-        if (!sequence) {
-            return JSON.stringify({
-                success: false,
-                error: "No active sequence"
-            });
-        }
-
-        var segments = JSON.parse(segmentsJson);
-        var deletedCount = deleteSegments(sequence, segments, margin, margin);
-
-        return JSON.stringify({
-            success: true,
-            deletedCount: deletedCount
-        });
-    } catch (e) {
-        return JSON.stringify({
-            success: false,
-            error: "rippleDeleteSegments error: " + e.toString()
         });
     }
 }

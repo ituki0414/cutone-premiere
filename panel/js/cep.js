@@ -1,6 +1,7 @@
 /**
  * CutOne - CEP Communication Layer
  * Handles communication between panel and ExtendScript
+ * Version 2.0 - Complete rewrite for reliability
  */
 
 // Node.js modules (available in CEP with Node.js enabled)
@@ -118,17 +119,28 @@ const CEP = (function() {
                 console.log("[CEP] FFmpeg exited with code:", code);
                 console.log("[CEP] FFmpeg stderr length:", stderr.length);
 
+                // Log raw output for debugging (first 2000 chars)
+                console.log("[CEP] FFmpeg raw output (first 2000 chars):");
+                console.log(stderr.substring(0, 2000));
+
+                // Check if there are silence_start/silence_end in the output
+                const silenceStartCount = (stderr.match(/silence_start/g) || []).length;
+                const silenceEndCount = (stderr.match(/silence_end/g) || []).length;
+                console.log("[CEP] silence_start occurrences:", silenceStartCount);
+                console.log("[CEP] silence_end occurrences:", silenceEndCount);
+
                 if (onProgress) onProgress(100, totalDuration, 0);
 
                 // Parse silence segments from stderr
                 const segments = parseSilenceOutput(stderr);
-                console.log("[CEP] Found segments:", segments.length);
+                console.log("[CEP] Parsed segments:", segments.length);
 
                 resolve({
                     success: true,
                     segments: segments,
                     count: segments.length,
-                    rawOutputLength: stderr.length
+                    rawOutputLength: stderr.length,
+                    rawOutputSample: stderr.substring(0, 500)
                 });
             });
 
@@ -301,29 +313,69 @@ const CEP = (function() {
      * @param {function} onProgress - Progress callback (stage, percent, remaining)
      */
     async function processWithOptions(options, onProgress) {
-        console.log("[CEP] processWithOptions called with:", options);
+        console.log("[CEP] =====================================================");
+        console.log("[CEP] processWithOptions START");
+        console.log("[CEP] Options:", JSON.stringify(options, null, 2));
+        console.log("[CEP] =====================================================");
 
         try {
-            // Step 1: Get sequence info and source path from ExtendScript
+            // ============================================
+            // Step 1: Get sequence info and source path
+            // ============================================
             if (onProgress) onProgress("init", 0, null, "シーケンス情報を取得中...");
-            const seqInfo = await callExtendScript("getSequenceInfo");
-            console.log("[CEP] Sequence info:", seqInfo);
 
-            if (!seqInfo || !seqInfo.sourcePath) {
-                throw new Error("Could not get source media path from sequence");
+            const seqInfo = await callExtendScript("getSequenceInfo");
+            console.log("[CEP] Sequence info:", JSON.stringify(seqInfo, null, 2));
+
+            // Validate sequence info
+            if (!seqInfo) {
+                throw new Error("シーケンス情報を取得できませんでした");
             }
 
-            const originalDuration = seqInfo.duration;
+            if (!seqInfo.sourcePath) {
+                throw new Error("ソースメディアのパスを取得できませんでした。シーケンスにクリップがあることを確認してください。");
+            }
 
-            // Step 2: Run FFmpeg using Node.js
+            // Extract timing info with defaults
+            const clipStartInSequence = seqInfo.clipStartInSequence || 0;
+            const clipEndInSequence = seqInfo.clipEndInSequence || seqInfo.sequenceDuration || seqInfo.duration || 0;
+            const clipInPoint = seqInfo.clipInPoint || 0;
+            const clipOutPoint = seqInfo.clipOutPoint || (clipInPoint + (clipEndInSequence - clipStartInSequence));
+            const originalDuration = clipEndInSequence - clipStartInSequence;
+
+            console.log("[CEP] ========== Timing Info ==========");
+            console.log("[CEP] Clip in sequence: " + clipStartInSequence.toFixed(2) + "s - " + clipEndInSequence.toFixed(2) + "s");
+            console.log("[CEP] Clip duration: " + originalDuration.toFixed(2) + "s");
+            console.log("[CEP] Source in/out: " + clipInPoint.toFixed(2) + "s - " + clipOutPoint.toFixed(2) + "s");
+            console.log("[CEP] Source path: " + seqInfo.sourcePath);
+            console.log("[CEP] ===================================");
+
+            // Validate duration
+            if (originalDuration <= 0) {
+                throw new Error("シーケンスの長さが0です。クリップが正しく配置されているか確認してください。");
+            }
+
+            // ============================================
+            // Step 2: Run FFmpeg silence detection
+            // ============================================
             console.log("[CEP] Running FFmpeg silence detection...");
             if (onProgress) onProgress("analyze", 0, null, "音声を解析中... 0%");
 
+            const threshold = options.threshold || -35;
+            const minSilenceDuration = options.minSilenceDuration || 0.3;
+
+            console.log("[CEP] ========== FFmpeg Settings ==========");
+            console.log("[CEP] Threshold:", threshold, "dB");
+            console.log("[CEP] Min silence duration:", minSilenceDuration, "s");
+            console.log("[CEP] =======================================");
+
+            // FFmpeg analyzes the entire source file
+            // We'll filter segments later to only those within clip's used range
             const ffmpegResult = await runFFmpegSilenceDetect(
                 seqInfo.sourcePath,
-                options.threshold || -35,
-                options.minSilenceDuration || 0.3,
-                originalDuration,
+                threshold,
+                minSilenceDuration,
+                clipOutPoint, // Use outPoint as the duration estimate for progress
                 (percent, currentTime, remaining) => {
                     if (onProgress) {
                         let remainStr = "";
@@ -341,7 +393,21 @@ const CEP = (function() {
                 }
             );
 
-            console.log("[CEP] FFmpeg result:", ffmpegResult);
+            console.log("[CEP] ========== FFmpeg Result ==========");
+            console.log("[CEP] Success:", ffmpegResult.success);
+            console.log("[CEP] Raw segments found:", ffmpegResult.segments.length);
+
+            // Log all detected segments
+            if (ffmpegResult.segments.length > 0) {
+                console.log("[CEP] All detected silence segments (in source file time):");
+                let totalSilenceDetected = 0;
+                for (let i = 0; i < ffmpegResult.segments.length; i++) {
+                    const seg = ffmpegResult.segments[i];
+                    console.log(`[CEP]   ${i+1}: ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s (${seg.duration.toFixed(2)}s)`);
+                    totalSilenceDetected += seg.duration;
+                }
+                console.log(`[CEP] Total silence detected: ${totalSilenceDetected.toFixed(2)}s`);
+            }
 
             if (!ffmpegResult.success || ffmpegResult.segments.length === 0) {
                 return {
@@ -351,30 +417,206 @@ const CEP = (function() {
                     originalDuration: originalDuration,
                     newDuration: originalDuration,
                     savedPercent: 0,
-                    message: "No silence segments found"
+                    message: "無音区間が検出されませんでした"
                 };
             }
 
-            // Step 3: Send segments to ExtendScript for processing
-            if (onProgress) onProgress("cut", 0, null, `${ffmpegResult.segments.length}箇所の無音をカット中...`);
+            // ============================================
+            // Step 3: Filter and adjust segments
+            // ============================================
+            console.log("[CEP] ========== Segment Filtering ==========");
+            console.log("[CEP] Source file range used: " + clipInPoint.toFixed(2) + "s - " + clipOutPoint.toFixed(2) + "s");
+
+            // IMPORTANT: First filter to only segments within the clip's source range
+            // FFmpeg times are in SOURCE FILE time
+            const filteredSegments = ffmpegResult.segments.filter(seg => {
+                // Segment must overlap with the clip's used portion of source
+                const overlapStart = Math.max(seg.start, clipInPoint);
+                const overlapEnd = Math.min(seg.end, clipOutPoint);
+
+                if (overlapEnd <= overlapStart) {
+                    console.log(`[CEP]   SKIP (outside clip range): ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s`);
+                    return false;
+                }
+                return true;
+            });
+
+            console.log(`[CEP] Segments within clip range: ${filteredSegments.length} / ${ffmpegResult.segments.length}`);
+
+            // Now adjust timestamps: convert from source file time to sequence time
+            // Formula: sequenceTime = clipStartInSequence + (sourceTime - clipInPoint)
+            const adjustedSegments = filteredSegments.map(seg => {
+                // Clamp segment to clip's source range
+                const clampedStart = Math.max(seg.start, clipInPoint);
+                const clampedEnd = Math.min(seg.end, clipOutPoint);
+
+                // Convert to sequence time
+                const seqStart = clipStartInSequence + (clampedStart - clipInPoint);
+                const seqEnd = clipStartInSequence + (clampedEnd - clipInPoint);
+
+                return {
+                    start: seqStart,
+                    end: seqEnd,
+                    duration: seqEnd - seqStart,
+                    // Keep original for debugging
+                    _sourceStart: clampedStart,
+                    _sourceEnd: clampedEnd
+                };
+            }).filter(seg => {
+                // Final validation
+                if (seg.duration < 0.1) {
+                    console.log(`[CEP]   SKIP (too short after adjustment): ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s (${seg.duration.toFixed(2)}s)`);
+                    return false;
+                }
+                if (seg.start < 0) {
+                    console.log(`[CEP]   SKIP (negative start): ${seg.start.toFixed(2)}s`);
+                    return false;
+                }
+                return true;
+            });
+
+            console.log("[CEP] Adjusted segments (first 5):");
+            for (let i = 0; i < Math.min(5, adjustedSegments.length); i++) {
+                const seg = adjustedSegments[i];
+                console.log(`[CEP]   ${i+1}: ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s (${seg.duration.toFixed(2)}s) [source: ${seg._sourceStart.toFixed(2)}s - ${seg._sourceEnd.toFixed(2)}s]`);
+            }
+            if (adjustedSegments.length > 5) {
+                console.log(`[CEP]   ... and ${adjustedSegments.length - 5} more`);
+            }
+            console.log("[CEP] ==========================================");
+
+            if (adjustedSegments.length === 0) {
+                return {
+                    success: true,
+                    segmentsFound: ffmpegResult.segments.length,
+                    segmentsProcessed: 0,
+                    originalDuration: originalDuration,
+                    newDuration: originalDuration,
+                    savedPercent: 0,
+                    message: "クリップ範囲内に有効な無音区間がありませんでした"
+                };
+            }
+
+            // ============================================
+            // Step 4: Safety checks
+            // ============================================
+            let totalSilenceDuration = 0;
+            for (const seg of adjustedSegments) {
+                // Account for padding
+                const paddingBefore = options.paddingBefore || 0.2;
+                const paddingAfter = options.paddingAfter || 0.2;
+                const effectiveDuration = seg.duration - paddingBefore - paddingAfter;
+                if (effectiveDuration > 0) {
+                    totalSilenceDuration += effectiveDuration;
+                }
+            }
+
+            const silencePercent = (totalSilenceDuration / originalDuration) * 100;
+
+            console.log("[CEP] ========== Safety Check ==========");
+            console.log("[CEP] Total silence to delete: " + totalSilenceDuration.toFixed(2) + "s");
+            console.log("[CEP] Original duration: " + originalDuration.toFixed(2) + "s");
+            console.log("[CEP] Silence percentage: " + silencePercent.toFixed(1) + "%");
+
+            // SAFETY CHECK 1: Very few segments covering most of the video
+            if (adjustedSegments.length <= 2 && silencePercent > 50 && options.silenceAction === "delete") {
+                console.error("[CEP] SAFETY STOP: Only " + adjustedSegments.length + " segment(s) covering " + silencePercent.toFixed(1) + "% - likely wrong detection!");
+                return {
+                    success: false,
+                    error: "安全停止: " + adjustedSegments.length + "個のセグメントで動画の" + silencePercent.toFixed(0) + "%をカバー。\n" +
+                           "正常な無音検出ではありません。\n" +
+                           "音声ファイルに問題がある可能性があります。",
+                    segmentsFound: adjustedSegments.length,
+                    silencePercent: silencePercent,
+                    threshold: threshold
+                };
+            }
+
+            // SAFETY CHECK 2: More than 80% would be deleted
+            if (silencePercent > 80 && options.silenceAction === "delete") {
+                console.error("[CEP] SAFETY STOP: Would delete " + silencePercent.toFixed(1) + "% of content!");
+                return {
+                    success: false,
+                    error: "安全停止: 動画の" + silencePercent.toFixed(0) + "%が削除されようとしています。\n" +
+                           "閾値(しきいち)の設定を確認してください。\n" +
+                           "現在の閾値: " + threshold + "dB\n" +
+                           "より低い値（例: -50dB）を試してください。",
+                    segmentsFound: adjustedSegments.length,
+                    silencePercent: silencePercent,
+                    threshold: threshold
+                };
+            }
+
+            // SAFETY CHECK 3: Would delete entire clip
+            if (totalSilenceDuration >= originalDuration * 0.95 && options.silenceAction === "delete") {
+                console.error("[CEP] SAFETY STOP: Would delete almost entire clip!");
+                return {
+                    success: false,
+                    error: "安全停止: ほぼ全てのコンテンツが削除されようとしています。\n" +
+                           "音声トラックが無音になっていないか確認してください。",
+                    segmentsFound: adjustedSegments.length,
+                    silencePercent: silencePercent,
+                    threshold: threshold
+                };
+            }
+            console.log("[CEP] Safety checks passed ✓");
+            console.log("[CEP] ====================================");
+
+            // ============================================
+            // Step 5: Send to ExtendScript for processing
+            // ============================================
+            if (onProgress) onProgress("cut", 0, null, `${adjustedSegments.length}箇所の無音をカット中...`);
+
+            // Clean up segments for ExtendScript (remove debug properties)
+            const cleanSegments = adjustedSegments.map(seg => ({
+                start: seg.start,
+                end: seg.end,
+                duration: seg.duration
+            }));
 
             const processOptions = {
-                segments: ffmpegResult.segments,
+                segments: cleanSegments,
                 paddingBefore: options.paddingBefore || 0.2,
                 paddingAfter: options.paddingAfter || 0.2,
-                silenceAction: options.silenceAction || "delete"
+                silenceAction: options.silenceAction || "delete",
+                // Pass original duration to ExtendScript for validation
+                expectedOriginalDuration: originalDuration
             };
 
-            console.log("[CEP] Calling ExtendScript to process segments...");
+            console.log("[CEP] Calling ExtendScript processSegments...");
+            console.log("[CEP] Segments to process: " + cleanSegments.length);
+
             const result = await callExtendScript("processSegments", [JSON.stringify(processOptions)]);
-            console.log("[CEP] processSegments result:", result);
+
+            console.log("[CEP] processSegments result:", JSON.stringify(result, null, 2));
 
             if (onProgress) onProgress("done", 100, 0, "完了！");
+
+            // Ensure result has valid duration values
+            if (result && result.success) {
+                // Use our calculated originalDuration if ExtendScript returned 0
+                if (!result.originalDuration || result.originalDuration === 0) {
+                    result.originalDuration = originalDuration;
+                }
+                // Calculate newDuration and savedPercent if not present
+                if (result.newDuration === undefined) {
+                    result.newDuration = result.originalDuration - totalSilenceDuration;
+                }
+                if (result.savedPercent === undefined && result.originalDuration > 0) {
+                    result.savedPercent = ((result.originalDuration - result.newDuration) / result.originalDuration) * 100;
+                }
+            }
+
+            console.log("[CEP] =====================================================");
+            console.log("[CEP] processWithOptions END");
+            console.log("[CEP] Final result:", JSON.stringify(result, null, 2));
+            console.log("[CEP] =====================================================");
 
             return result;
 
         } catch (e) {
             console.error("[CEP] processWithOptions error:", e);
+            console.error("[CEP] Error stack:", e.stack);
             throw e;
         }
     }

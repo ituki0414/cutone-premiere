@@ -926,6 +926,9 @@
             } else {
                 if (result && result.segmentsFound === 0) {
                     showToast(I18n.t("msg.noSilence"), "info");
+                } else if (result && result.error) {
+                    // Show the actual error message from the result
+                    showToast(result.error, "error");
                 } else {
                     showToast(I18n.t("msg.error"), "error");
                 }
