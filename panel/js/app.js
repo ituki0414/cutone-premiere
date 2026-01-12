@@ -448,26 +448,33 @@
             const options = {
                 threshold: parseInt(elements.thresholdSlider.value),
                 minSilenceDuration: parseInt(elements.minSilenceDuration.value) / 1000,
-                minTalkDuration: parseInt(elements.minTalkDuration.value) / 1000
+                minTalkDuration: parseInt(elements.minTalkDuration.value) / 1000,
+                numSamples: 100
             };
 
-            // Get preview with options
-            const result = await CEP.previewWithOptions(options);
+            // Get preview with options (includes silence detection and waveform)
+            const result = await CEP.previewWithOptions(options, (stage, percent, remaining, message) => {
+                updateLoadingText(message);
+            });
 
             if (result && result.success) {
                 detectedSegments = result.segments || [];
 
-                // Get audio levels for waveform
-                const levelsResult = await CEP.getAudioLevels(100);
-                if (levelsResult && levelsResult.success) {
-                    audioLevels = levelsResult.levels;
+                // Use audio levels from the preview result
+                if (result.audioLevels && result.audioLevels.length > 0) {
+                    audioLevels = result.audioLevels;
                 }
 
                 // Render waveform with detected segments
                 renderPreviewWaveform();
 
                 hideLoading();
-                showToast(I18n.t("msg.foundSegments", { count: result.count }), "success");
+
+                if (result.count > 0) {
+                    showToast(I18n.t("msg.foundSegments", { count: result.count }), "success");
+                } else {
+                    showToast(I18n.t("msg.noSilence"), "info");
+                }
             } else {
                 hideLoading();
                 showToast(I18n.t("msg.noSilence"), "info");
