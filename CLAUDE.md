@@ -53,16 +53,17 @@
 - **ExtendScript (index.jsx)**: v21.0
   - True J-Cut/L-Cut: ビデオとオーディオを別々のタイミングでカット
   - Constant Power: 自動でオーディオトランジション追加
+  - 文字起こし: getFirstClipPath, addCaptionsToSequence
   - `sequence.timebase` を直接使用（全フレームレート対応: 23.976, 29.97, etc.）
   - フレーム境界に揃えてカット（映像/音声ズレ防止）
-  - `qeSeq.setInPoint("")` / `qeSeq.setOutPoint("")` でクリア（再生可能に）
   - バッチ処理対応
 
-- **CEP (cep.js)**: v6.0
+- **CEP (cep.js)**: v7.0
+  - AI文字起こし: OpenAI Whisper API連携
   - J-Cut: オーディオがビデオより先行（150msオフセット）
   - L-Cut: ビデオがオーディオより先行（150msオフセット）
-  - バッチ処理で進捗表示（`カット中... X/Y件 (Z%) 残り約N秒`）
-  - セグメントを5件ずつバッチ処理
+  - SRTエクスポート機能
+  - バッチ処理で進捗表示
 
 ## トラブルシューティング
 
@@ -95,3 +96,4 @@ git checkout <commit-hash> -- hostscript/index.jsx  # 特定ファイルを復�
 | v19.0 | 進捗が分からない | バッチ処理で進捗表示（%・残り時間） |
 | v20.0 | - | silenceAction追加（disable/deleteKeepSpace） |
 | v21.0 | J/L-Cut未実装 | True J-Cut/L-Cut + Constant Power実装 |
+| v7.0 (CEP) | 文字起こし機能なし | Whisper API連携 + SRTエクスポート |

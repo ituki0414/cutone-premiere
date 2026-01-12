@@ -1795,3 +1795,154 @@ function getAudioLevels(numSamples) {
         return JSON.stringify({ success: false, error: e.toString() });
     }
 }
+
+// ============================================
+// Transcription Functions
+// ============================================
+
+/**
+ * Get the file path of the first clip in the sequence
+ * Used to extract audio for transcription
+ */
+function getFirstClipPath() {
+    try {
+        var sequence = app.project.activeSequence;
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== getFirstClipPath ===");
+
+        // Try to find a clip with a valid media path
+        // Check video tracks first
+        for (var v = 0; v < sequence.videoTracks.numTracks; v++) {
+            var track = sequence.videoTracks[v];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                if (clip && clip.projectItem) {
+                    var mediaPath = clip.projectItem.getMediaPath();
+                    if (mediaPath && mediaPath.length > 0) {
+                        log("Found video clip path: " + mediaPath);
+                        return JSON.stringify({
+                            success: true,
+                            path: mediaPath,
+                            type: "video",
+                            name: clip.name || clip.projectItem.name
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check audio tracks
+        for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
+            var aTrack = sequence.audioTracks[a];
+            for (var ac = 0; ac < aTrack.clips.numItems; ac++) {
+                var aClip = aTrack.clips[ac];
+                if (aClip && aClip.projectItem) {
+                    var aMediaPath = aClip.projectItem.getMediaPath();
+                    if (aMediaPath && aMediaPath.length > 0) {
+                        log("Found audio clip path: " + aMediaPath);
+                        return JSON.stringify({
+                            success: true,
+                            path: aMediaPath,
+                            type: "audio",
+                            name: aClip.name || aClip.projectItem.name
+                        });
+                    }
+                }
+            }
+        }
+
+        return JSON.stringify({ success: false, error: "No clips with media found in sequence" });
+    } catch (e) {
+        log("getFirstClipPath error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Add captions to sequence
+ * Creates markers with text or adds to caption track
+ * @param {string} segmentsJson - JSON array of {start, end, text} segments
+ */
+function addCaptionsToSequence(segmentsJson) {
+    try {
+        var segments = JSON.parse(segmentsJson);
+        var sequence = app.project.activeSequence;
+
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== addCaptionsToSequence ===");
+        log("Adding " + segments.length + " caption segments");
+
+        var markers = sequence.markers;
+        var addedCount = 0;
+
+        // Add each segment as a marker with the transcription text
+        for (var i = 0; i < segments.length; i++) {
+            var seg = segments[i];
+
+            try {
+                // Create marker at segment start time
+                var marker = markers.createMarker(seg.start);
+
+                if (marker) {
+                    marker.name = "Caption " + (i + 1);
+                    marker.comments = seg.text;
+                    marker.end = seg.end;
+
+                    // Set marker color to yellow for captions
+                    marker.setColorByIndex(3); // Yellow
+
+                    addedCount++;
+                    log("Added caption " + (i + 1) + ": " + seg.text.substring(0, 30) + "...");
+                }
+            } catch (markerErr) {
+                log("Could not add marker " + (i + 1) + ": " + markerErr);
+            }
+        }
+
+        log("Successfully added " + addedCount + " captions");
+
+        return JSON.stringify({
+            success: true,
+            count: addedCount,
+            total: segments.length
+        });
+    } catch (e) {
+        log("addCaptionsToSequence error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Import SRT file as captions
+ * @param {string} srtPath - Path to SRT file
+ */
+function importSRTCaptions(srtPath) {
+    try {
+        var sequence = app.project.activeSequence;
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== importSRTCaptions ===");
+        log("Importing: " + srtPath);
+
+        // Try to import the SRT file using the project importer
+        var importResult = app.project.importFiles([srtPath], true, app.project.rootItem, false);
+
+        if (importResult) {
+            log("SRT file imported successfully");
+            return JSON.stringify({ success: true, message: "SRT imported" });
+        } else {
+            return JSON.stringify({ success: false, error: "Import failed" });
+        }
+    } catch (e) {
+        log("importSRTCaptions error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}

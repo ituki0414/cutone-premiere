@@ -1717,3 +1717,161 @@ body {
 .wizard-actions .btn-cut:hover {
     background: #ea580c;
 }
+
+/* ============================================
+   Transcription Screen Styles
+   ============================================ */
+
+/* Input with toggle (for API key visibility) */
+.input-with-toggle {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-toggle .input {
+    flex: 1;
+    padding-right: 40px;
+}
+
+.toggle-visibility-btn {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    transition: color 0.2s;
+}
+
+.toggle-visibility-btn:hover {
+    color: var(--text-primary);
+}
+
+/* Checkbox styles */
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.checkbox-label input[type="checkbox"] {
+    display: none;
+}
+
+.checkbox-box {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-card);
+    position: relative;
+    transition: all 0.2s;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-box {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-box::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Transcription result styles */
+.transcription-result {
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.transcription-segment {
+    padding: 12px;
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+}
+
+.transcription-segment:hover {
+    border-color: var(--accent);
+}
+
+.transcription-segment-time {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    font-family: monospace;
+    margin-bottom: 4px;
+}
+
+.transcription-segment-text {
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.transcription-stats {
+    display: flex;
+    gap: 24px;
+    padding: 8px 0;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.stat-item .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.stat-item .stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Button with icon */
+.btn-primary svg,
+.btn-secondary svg {
+    flex-shrink: 0;
+}
+
+.wizard-actions .btn-large {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* Settings card title with icon */
+.settings-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-card-title svg {
+    color: var(--accent);
+}

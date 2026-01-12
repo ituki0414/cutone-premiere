@@ -39,7 +39,28 @@
 
         // Feature cards
         featureSilence: document.getElementById("featureSilence"),
+        featureCaptions: document.getElementById("featureCaptions"),
         backFromSilenceBtn: document.getElementById("backFromSilenceBtn"),
+        backFromTranscriptionBtn: document.getElementById("backFromTranscriptionBtn"),
+
+        // Transcription screen
+        transcriptionScreen: document.getElementById("transcriptionScreen"),
+        transcriptionSequenceName: document.getElementById("transcriptionSequenceName"),
+        transcriptionSequenceDuration: document.getElementById("transcriptionSequenceDuration"),
+        transcriptionRefreshBtn: document.getElementById("transcriptionRefreshBtn"),
+        openaiApiKey: document.getElementById("openaiApiKey"),
+        toggleApiKeyBtn: document.getElementById("toggleApiKeyBtn"),
+        openaiApiLink: document.getElementById("openaiApiLink"),
+        addToSequence: document.getElementById("addToSequence"),
+        exportSrt: document.getElementById("exportSrt"),
+        transcriptionPreviewSection: document.getElementById("transcriptionPreviewSection"),
+        transcriptionResult: document.getElementById("transcriptionResult"),
+        transcriptionSegmentCount: document.getElementById("transcriptionSegmentCount"),
+        transcriptionCharCount: document.getElementById("transcriptionCharCount"),
+        startTranscriptionBtn: document.getElementById("startTranscriptionBtn"),
+        transcriptionResultActions: document.getElementById("transcriptionResultActions"),
+        reTranscribeBtn: document.getElementById("reTranscribeBtn"),
+        applyTranscriptionBtn: document.getElementById("applyTranscriptionBtn"),
 
         // Wizard
         wizardStep1: document.getElementById("step1"),
@@ -111,6 +132,10 @@
     let selectedTracks = ["A1", "A2", "A3"];
     let isProcessing = false; // Guard against multiple concurrent processing
 
+    // Transcription state
+    let transcriptionSegments = [];
+    let isTranscribing = false;
+
     // ============================================
     // Initialization
     // ============================================
@@ -173,6 +198,16 @@
         // Feature cards
         elements.featureSilence.addEventListener("click", showSilenceScreen);
         elements.backFromSilenceBtn.addEventListener("click", showMainScreen);
+        elements.featureCaptions.addEventListener("click", showTranscriptionScreen);
+        elements.backFromTranscriptionBtn.addEventListener("click", showMainScreen);
+
+        // Transcription screen
+        elements.transcriptionRefreshBtn.addEventListener("click", refreshTranscriptionSequenceInfo);
+        elements.toggleApiKeyBtn.addEventListener("click", toggleApiKeyVisibility);
+        elements.openaiApiLink.addEventListener("click", openOpenAIApiPage);
+        elements.startTranscriptionBtn.addEventListener("click", startTranscription);
+        elements.reTranscribeBtn.addEventListener("click", resetTranscription);
+        elements.applyTranscriptionBtn.addEventListener("click", applyTranscription);
 
         // Wizard navigation
         elements.nextStepBtn.addEventListener("click", goToStep2);
@@ -247,6 +282,7 @@
         elements.licenseScreen.classList.add("hidden");
         elements.mainScreen.classList.add("hidden");
         elements.silenceScreen.classList.add("hidden");
+        elements.transcriptionScreen.classList.add("hidden");
 
         // Hide status bar by default
         elements.statusBar.classList.add("hidden");
@@ -271,6 +307,12 @@
                 elements.silenceScreen.classList.remove("hidden");
                 elements.statusBar.classList.remove("hidden");
                 refreshSequenceInfo();
+                break;
+            case "transcription":
+                elements.transcriptionScreen.classList.remove("hidden");
+                elements.statusBar.classList.remove("hidden");
+                refreshTranscriptionSequenceInfo();
+                loadSavedApiKey();
                 break;
         }
     }
@@ -300,6 +342,237 @@
         updateWizardUI();
         // Reset preview
         resetPreviewWaveform();
+    }
+
+    function showTranscriptionScreen() {
+        showScreen("transcription");
+        // Reset transcription state
+        resetTranscription();
+    }
+
+    // ============================================
+    // Transcription Functions
+    // ============================================
+
+    async function refreshTranscriptionSequenceInfo() {
+        try {
+            const result = await CEP.getActiveSequence();
+            if (result && result.success) {
+                currentSequence = result;
+                elements.transcriptionSequenceName.textContent = result.name;
+                elements.transcriptionSequenceDuration.textContent = result.durationFormatted;
+            } else {
+                currentSequence = null;
+                elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
+                elements.transcriptionSequenceDuration.textContent = "--:--";
+            }
+        } catch (e) {
+            console.error("[CutOne] Error getting sequence:", e);
+        }
+    }
+
+    function toggleApiKeyVisibility() {
+        const input = elements.openaiApiKey;
+        if (input.type === "password") {
+            input.type = "text";
+        } else {
+            input.type = "password";
+        }
+    }
+
+    function openOpenAIApiPage(e) {
+        e.preventDefault();
+        CEP.openURL("https://platform.openai.com/api-keys");
+    }
+
+    function loadSavedApiKey() {
+        const savedKey = localStorage.getItem("cutone_openai_api_key");
+        if (savedKey) {
+            elements.openaiApiKey.value = savedKey;
+        }
+    }
+
+    function saveApiKey(key) {
+        localStorage.setItem("cutone_openai_api_key", key);
+    }
+
+    function getSelectedTranscriptionLanguage() {
+        const selected = document.querySelector('input[name="transcriptionLang"]:checked');
+        return selected ? selected.value : "ja";
+    }
+
+    async function startTranscription() {
+        if (isTranscribing) {
+            console.log("[CutOne] Already transcribing");
+            return;
+        }
+
+        const apiKey = elements.openaiApiKey.value.trim();
+        if (!apiKey) {
+            showToast("OpenAI APIキーを入力してください", "error");
+            return;
+        }
+
+        if (!apiKey.startsWith("sk-")) {
+            showToast("有効なAPIキーを入力してください（sk-で始まる）", "error");
+            return;
+        }
+
+        // Save API key for future use
+        saveApiKey(apiKey);
+
+        if (!currentSequence) {
+            await refreshTranscriptionSequenceInfo();
+            if (!currentSequence) {
+                showToast("シーケンスを開いてください", "error");
+                return;
+            }
+        }
+
+        isTranscribing = true;
+
+        try {
+            showLoading("文字起こしを開始中...");
+
+            const options = {
+                apiKey: apiKey,
+                language: getSelectedTranscriptionLanguage()
+            };
+
+            const result = await CEP.transcribeAudio(options, (message, percent) => {
+                updateLoadingText(message);
+            });
+
+            hideLoading();
+
+            if (result && result.success) {
+                transcriptionSegments = result.segments;
+                displayTranscriptionResult(result.segments);
+                showToast(`${result.segments.length}セグメントの文字起こしが完了しました`, "success");
+            } else {
+                showToast(result?.error || "文字起こしに失敗しました", "error");
+            }
+        } catch (e) {
+            hideLoading();
+            showToast(e.message || "文字起こしに失敗しました", "error");
+            console.error("[CutOne] Transcription error:", e);
+        } finally {
+            isTranscribing = false;
+        }
+    }
+
+    function displayTranscriptionResult(segments) {
+        // Show preview section
+        elements.transcriptionPreviewSection.style.display = "block";
+
+        // Render segments
+        let html = "";
+        let totalChars = 0;
+
+        segments.forEach((seg) => {
+            const startTime = formatTimestamp(seg.start);
+            const endTime = formatTimestamp(seg.end);
+            totalChars += seg.text.length;
+
+            html += `
+                <div class="transcription-segment">
+                    <div class="transcription-segment-time">${startTime} → ${endTime}</div>
+                    <div class="transcription-segment-text">${escapeHtml(seg.text)}</div>
+                </div>
+            `;
+        });
+
+        elements.transcriptionResult.innerHTML = html;
+        elements.transcriptionSegmentCount.textContent = segments.length;
+        elements.transcriptionCharCount.textContent = totalChars;
+
+        // Show result actions, hide start button
+        elements.startTranscriptionBtn.parentElement.style.display = "none";
+        elements.transcriptionResultActions.style.display = "flex";
+    }
+
+    function formatTimestamp(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds % 1) * 100);
+        return `${mins}:${secs.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function resetTranscription() {
+        transcriptionSegments = [];
+        isTranscribing = false;
+
+        // Hide preview section
+        elements.transcriptionPreviewSection.style.display = "none";
+        elements.transcriptionResult.innerHTML = "";
+
+        // Show start button, hide result actions
+        elements.startTranscriptionBtn.parentElement.style.display = "flex";
+        elements.transcriptionResultActions.style.display = "none";
+    }
+
+    async function applyTranscription() {
+        if (transcriptionSegments.length === 0) {
+            showToast("文字起こし結果がありません", "error");
+            return;
+        }
+
+        showLoading("字幕を適用中...");
+
+        try {
+            const addToSeq = elements.addToSequence.checked;
+            const exportSrt = elements.exportSrt.checked;
+
+            let results = [];
+
+            // Add to sequence as markers
+            if (addToSeq) {
+                const addResult = await CEP.addCaptionsToSequence(transcriptionSegments);
+                if (addResult && addResult.success) {
+                    results.push(`${addResult.count}個のマーカーを追加`);
+                }
+            }
+
+            // Export SRT file
+            if (exportSrt) {
+                // Get project folder path
+                const sequenceResult = await CEP.callExtendScript("getSequenceInfo", []);
+                let srtPath = "";
+
+                if (sequenceResult && sequenceResult.projectPath) {
+                    const projectDir = sequenceResult.projectPath.replace(/[^/\\]+$/, "");
+                    srtPath = projectDir + currentSequence.name + "_captions.srt";
+                } else {
+                    // Fallback to temp directory
+                    const os = require("os");
+                    srtPath = os.tmpdir() + "/" + (currentSequence?.name || "captions") + ".srt";
+                }
+
+                const srtResult = await CEP.exportSRT(transcriptionSegments, srtPath);
+                if (srtResult && srtResult.success) {
+                    results.push(`SRTファイルを保存: ${srtPath}`);
+                }
+            }
+
+            hideLoading();
+
+            if (results.length > 0) {
+                showToast(results.join("、"), "success");
+            } else {
+                showToast("出力オプションを選択してください", "info");
+            }
+
+        } catch (e) {
+            hideLoading();
+            showToast(e.message || "適用に失敗しました", "error");
+            console.error("[CutOne] Apply error:", e);
+        }
     }
 
     // ============================================

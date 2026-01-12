@@ -1,6 +1,6 @@
 /**
  * CutOne - CEP Communication Layer
- * Version 6.0 - True J-Cut/L-Cut and Constant Power transitions
+ * Version 7.0 - Whisper Transcription
  *
  * Key improvement: Analyze audio levels first, then set relative threshold
  * v5.1: Added minTalkDuration - merges silence segments with short speech gaps
@@ -8,6 +8,7 @@
  * v5.3: Added previewWithOptions - real silence detection and waveform preview
  * v5.4: Added selectedTracks - process only selected audio tracks
  * v6.0: True J-Cut/L-Cut with separate video/audio timing + Constant Power transitions
+ * v7.0: AI transcription using OpenAI Whisper API
  */
 
 const childProcess = require("child_process");
@@ -973,6 +974,309 @@ const CEP = (function() {
         return callExtendScript("testExtendScript");
     }
 
+    // ============================================
+    // Transcription Functions
+    // ============================================
+
+    /**
+     * Transcribe audio using OpenAI Whisper API
+     * @param {Object} options - Transcription options
+     * @param {string} options.apiKey - OpenAI API key
+     * @param {string} options.language - Language code (ja, en, or auto)
+     * @param {Function} onProgress - Progress callback
+     * @returns {Promise<Object>} Transcription result with segments
+     */
+    async function transcribeAudio(options, onProgress) {
+        console.log("[CEP] Starting transcription...");
+
+        if (!options.apiKey) {
+            throw new Error("OpenAI APIキーが必要です");
+        }
+
+        // Step 1: Get sequence info and audio file
+        if (onProgress) onProgress("準備中...", 5);
+
+        const sequenceInfo = await getActiveSequence();
+        if (!sequenceInfo || !sequenceInfo.success) {
+            throw new Error("シーケンスが見つかりません。シーケンスを開いてください。");
+        }
+
+        // Step 2: Get audio file path from sequence
+        if (onProgress) onProgress("音声を抽出中...", 10);
+
+        const audioPath = await extractSequenceAudio(sequenceInfo, onProgress);
+        if (!audioPath) {
+            throw new Error("音声ファイルの抽出に失敗しました");
+        }
+
+        // Step 3: Send to Whisper API
+        if (onProgress) onProgress("AIで文字起こし中...", 30);
+
+        const transcription = await callWhisperAPI(audioPath, options.apiKey, options.language, onProgress);
+
+        // Step 4: Clean up temp file
+        try {
+            const fs = require("fs");
+            fs.unlinkSync(audioPath);
+        } catch (e) {
+            console.log("[CEP] Could not delete temp file:", e);
+        }
+
+        // Step 5: Process and return result
+        if (onProgress) onProgress("処理完了", 100);
+
+        return {
+            success: true,
+            segments: transcription.segments,
+            text: transcription.text,
+            language: transcription.language
+        };
+    }
+
+    /**
+     * Extract audio from sequence to temporary file
+     */
+    async function extractSequenceAudio(sequenceInfo, onProgress) {
+        return new Promise((resolve, reject) => {
+            // Get the first video/audio clip path from the sequence
+            callExtendScript("getFirstClipPath", []).then(result => {
+                if (result && result.success && result.path) {
+                    console.log("[CEP] Source media path:", result.path);
+
+                    // Create temp file for extracted audio
+                    const os = require("os");
+                    const tempDir = os.tmpdir();
+                    const timestamp = Date.now();
+                    const outputPath = path.join(tempDir, `cutone_audio_${timestamp}.mp3`);
+
+                    const ffmpegPath = getFFmpegPath();
+                    if (!ffmpegPath) {
+                        reject(new Error("FFmpegが見つかりません"));
+                        return;
+                    }
+
+                    // Extract audio using FFmpeg (16kHz mono for Whisper)
+                    const args = [
+                        "-y",
+                        "-i", result.path,
+                        "-vn",
+                        "-acodec", "libmp3lame",
+                        "-ar", "16000",
+                        "-ac", "1",
+                        "-b:a", "64k",
+                        outputPath
+                    ];
+
+                    console.log("[CEP] Extracting audio:", ffmpegPath);
+
+                    const ffmpeg = childProcess.spawn(ffmpegPath, args);
+                    let stderr = "";
+
+                    ffmpeg.stderr.on("data", (data) => {
+                        stderr += data.toString();
+                        // Parse progress from FFmpeg output
+                        const timeMatch = stderr.match(/time=(\d+):(\d+):(\d+)/);
+                        if (timeMatch && onProgress) {
+                            const mins = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
+                            onProgress(`音声を抽出中... ${mins}秒`, 10 + Math.min(mins, 15));
+                        }
+                    });
+
+                    ffmpeg.on("close", (code) => {
+                        if (code === 0) {
+                            console.log("[CEP] Audio extracted to:", outputPath);
+                            resolve(outputPath);
+                        } else {
+                            console.error("[CEP] FFmpeg error:", stderr);
+                            reject(new Error("音声抽出に失敗しました"));
+                        }
+                    });
+
+                    ffmpeg.on("error", (err) => {
+                        reject(new Error("FFmpegの実行に失敗: " + err.message));
+                    });
+                } else {
+                    reject(new Error("シーケンスにメディアが見つかりません"));
+                }
+            }).catch(reject);
+        });
+    }
+
+    /**
+     * Call OpenAI Whisper API for transcription
+     */
+    async function callWhisperAPI(audioPath, apiKey, language, onProgress) {
+        const https = require("https");
+        const fs = require("fs");
+
+        return new Promise((resolve, reject) => {
+            // Check file size (Whisper has 25MB limit)
+            const stats = fs.statSync(audioPath);
+            const fileSizeMB = stats.size / (1024 * 1024);
+            console.log("[CEP] Audio file size:", fileSizeMB.toFixed(2), "MB");
+
+            if (fileSizeMB > 25) {
+                reject(new Error("音声ファイルが大きすぎます（25MB制限）。より短いセクションを選択してください。"));
+                return;
+            }
+
+            // Read audio file
+            const audioData = fs.readFileSync(audioPath);
+
+            // Create multipart form data
+            const boundary = "----CutOneFormBoundary" + Date.now();
+
+            // Build form data parts
+            let formData = "";
+
+            // File header
+            formData += `--${boundary}\r\n`;
+            formData += `Content-Disposition: form-data; name="file"; filename="audio.mp3"\r\n`;
+            formData += `Content-Type: audio/mpeg\r\n\r\n`;
+
+            const fileHeader = Buffer.from(formData, "utf8");
+
+            // Other fields
+            let otherFields = `\r\n--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`;
+
+            otherFields += `--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="response_format"\r\n\r\nverbose_json\r\n`;
+
+            if (language && language !== "auto") {
+                otherFields += `--${boundary}\r\n`;
+                otherFields += `Content-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`;
+            }
+
+            otherFields += `--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="timestamp_granularities[]"\r\n\r\nsegment\r\n`;
+
+            otherFields += `--${boundary}--\r\n`;
+
+            const otherFieldsBuffer = Buffer.from(otherFields, "utf8");
+
+            // Combine all parts
+            const requestBody = Buffer.concat([fileHeader, audioData, otherFieldsBuffer]);
+
+            const requestOptions = {
+                hostname: "api.openai.com",
+                port: 443,
+                path: "/v1/audio/transcriptions",
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                    "Content-Length": requestBody.length
+                }
+            };
+
+            console.log("[CEP] Calling Whisper API...");
+            if (onProgress) onProgress("Whisper APIに送信中...", 35);
+
+            const req = https.request(requestOptions, (res) => {
+                let responseData = "";
+
+                res.on("data", (chunk) => {
+                    responseData += chunk;
+                    if (onProgress) onProgress("文字起こし中...", 50 + Math.min(responseData.length / 1000, 40));
+                });
+
+                res.on("end", () => {
+                    try {
+                        const result = JSON.parse(responseData);
+
+                        if (res.statusCode !== 200) {
+                            console.error("[CEP] Whisper API error:", result);
+                            const errorMsg = result.error?.message || "APIエラー: " + res.statusCode;
+                            reject(new Error(errorMsg));
+                            return;
+                        }
+
+                        console.log("[CEP] Whisper API success, segments:", result.segments?.length);
+
+                        // Transform segments to our format
+                        const segments = (result.segments || []).map((seg, index) => ({
+                            id: index + 1,
+                            start: seg.start,
+                            end: seg.end,
+                            text: seg.text.trim()
+                        }));
+
+                        resolve({
+                            text: result.text,
+                            segments: segments,
+                            language: result.language || language
+                        });
+                    } catch (e) {
+                        console.error("[CEP] Parse error:", e, responseData.substring(0, 500));
+                        reject(new Error("APIレスポンスの解析に失敗しました"));
+                    }
+                });
+            });
+
+            req.on("error", (e) => {
+                console.error("[CEP] Request error:", e);
+                reject(new Error("APIリクエストに失敗: " + e.message));
+            });
+
+            req.write(requestBody);
+            req.end();
+        });
+    }
+
+    /**
+     * Add captions to sequence using ExtendScript
+     */
+    async function addCaptionsToSequence(segments) {
+        console.log("[CEP] Adding captions to sequence, count:", segments.length);
+
+        const result = await callExtendScript("addCaptionsToSequence", [JSON.stringify(segments)]);
+
+        if (result && result.success) {
+            console.log("[CEP] Captions added:", result.count);
+            return result;
+        } else {
+            throw new Error(result?.error || "キャプションの追加に失敗しました");
+        }
+    }
+
+    /**
+     * Export transcription as SRT file
+     */
+    async function exportSRT(segments, outputPath) {
+        const fs = require("fs");
+
+        // Generate SRT content
+        let srtContent = "";
+
+        segments.forEach((seg, index) => {
+            const startTime = formatSRTTime(seg.start);
+            const endTime = formatSRTTime(seg.end);
+
+            srtContent += `${index + 1}\n`;
+            srtContent += `${startTime} --> ${endTime}\n`;
+            srtContent += `${seg.text}\n\n`;
+        });
+
+        // Write to file
+        fs.writeFileSync(outputPath, srtContent, "utf8");
+        console.log("[CEP] SRT exported to:", outputPath);
+
+        return { success: true, path: outputPath };
+    }
+
+    /**
+     * Format seconds to SRT timestamp (HH:MM:SS,mmm)
+     */
+    function formatSRTTime(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        const ms = Math.round((seconds % 1) * 1000);
+
+        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")},${ms.toString().padStart(3, "0")}`;
+    }
+
     return {
         init,
         getActiveSequence,
@@ -985,6 +1289,9 @@ const CEP = (function() {
         getExtensionPath,
         isInCEP,
         callExtendScript,
-        testExtendScript
+        testExtendScript,
+        transcribeAudio,
+        addCaptionsToSequence,
+        exportSRT
     };
 })();

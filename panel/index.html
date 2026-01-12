@@ -162,14 +162,13 @@
                     <p class="feature-desc" data-i18n="feature.silenceDesc">タイムラインから無音部分を自動削除</p>
                 </div>
 
-                <!-- Coming Soon Cards -->
-                <div class="feature-card coming-soon">
+                <!-- Transcription Card -->
+                <div class="feature-card" id="featureCaptions">
                     <div class="feature-preview caption-preview">
                         <div class="caption-visual">
                             <div class="caption-line"></div>
                             <div class="caption-line short"></div>
                         </div>
-                        <span class="coming-badge" data-i18n="feature.comingSoon">近日公開</span>
                     </div>
                     <h3 class="feature-title" data-i18n="feature.captions">自動字幕</h3>
                     <p class="feature-desc" data-i18n="feature.captionsDesc">AIで字幕を自動生成</p>
@@ -566,6 +565,185 @@
                             <span class="stat-label" data-i18n="main.saved">削減</span>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transcription Screen -->
+        <div id="transcriptionScreen" class="screen hidden">
+            <button class="back-btn" id="backFromTranscriptionBtn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </button>
+
+            <!-- Page Title -->
+            <div class="page-header silence-header">
+                <div class="page-header-left">
+                    <svg class="page-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span data-i18n="feature.captions">自動字幕</span>
+                </div>
+                <button class="icon-btn" id="transcriptionRefreshBtn" title="Refresh">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Sequence Info Bar -->
+            <div class="sequence-info-bar">
+                <div class="sequence-info-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                        <line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/>
+                        <line x1="2" y1="12" x2="22" y2="12"/>
+                    </svg>
+                    <span id="transcriptionSequenceName" data-i18n="silence.noSequence">シーケンス未選択</span>
+                </div>
+                <div class="sequence-info-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span id="transcriptionSequenceDuration">00:00:00</span>
+                </div>
+            </div>
+
+            <!-- Settings Section -->
+            <div class="wizard-content">
+                <!-- API Key Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                        </svg>
+                        OpenAI API キー
+                    </h3>
+                    <p class="settings-card-desc">Whisper APIを使用するためのAPIキーを入力</p>
+                    <div class="form-group" style="margin-top: 12px;">
+                        <div class="input-with-toggle">
+                            <input type="password" id="openaiApiKey" class="input" placeholder="sk-..." style="font-family: monospace;">
+                            <button class="toggle-visibility-btn" id="toggleApiKeyBtn" type="button">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="input-hint" style="margin-top: 8px;">
+                            <a href="#" id="openaiApiLink" style="color: #5f7cf2;">OpenAI APIキーを取得 →</a>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Language Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        音声の言語
+                    </h3>
+                    <p class="settings-card-desc">文字起こしする音声の言語を選択</p>
+                    <div class="radio-group" style="margin-top: 12px;">
+                        <label class="radio-label">
+                            <input type="radio" name="transcriptionLang" value="ja" checked>
+                            <span class="radio-dot"></span>
+                            <span>日本語</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="transcriptionLang" value="en">
+                            <span class="radio-dot"></span>
+                            <span>English</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="transcriptionLang" value="auto">
+                            <span class="radio-dot"></span>
+                            <span>自動検出</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Output Options Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                        </svg>
+                        出力オプション
+                    </h3>
+                    <div class="checkbox-group" style="margin-top: 12px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="addToSequence" checked>
+                            <span class="checkbox-box"></span>
+                            <span>シーケンスにキャプションを追加</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="exportSrt" checked>
+                            <span class="checkbox-box"></span>
+                            <span>SRTファイルを書き出し</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Transcription Preview Section -->
+                <div class="settings-card" id="transcriptionPreviewSection" style="display: none;">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        文字起こし結果
+                    </h3>
+                    <div id="transcriptionResult" class="transcription-result" style="max-height: 300px; overflow-y: auto; background: #f6f8ff; border-radius: 12px; padding: 16px; margin-top: 12px;">
+                        <!-- Transcription segments will be rendered here -->
+                    </div>
+                    <div class="transcription-stats" style="margin-top: 12px; display: flex; gap: 16px;">
+                        <div class="stat-item">
+                            <span class="stat-label">セグメント数:</span>
+                            <span class="stat-value" id="transcriptionSegmentCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">総文字数:</span>
+                            <span class="stat-value" id="transcriptionCharCount">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="wizard-actions">
+                    <button class="btn-primary btn-large" id="startTranscriptionBtn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            <line x1="12" y1="19" x2="12" y2="23"/>
+                            <line x1="8" y1="23" x2="16" y2="23"/>
+                        </svg>
+                        <span>文字起こしを開始</span>
+                    </button>
+                </div>
+
+                <!-- Results Actions (hidden until transcription complete) -->
+                <div class="wizard-actions" id="transcriptionResultActions" style="display: none;">
+                    <button class="btn-secondary" id="reTranscribeBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        <span>再実行</span>
+                    </button>
+                    <button class="btn-primary" id="applyTranscriptionBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span>字幕を適用</span>
+                    </button>
                 </div>
             </div>
         </div>
