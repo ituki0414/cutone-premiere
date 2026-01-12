@@ -49,7 +49,7 @@ const CEP = (function() {
      * Step 1: Analyze audio levels using FFmpeg volumedetect
      * This is what DaVinci Resolve does - analyze first, then detect
      */
-    function analyzeAudioLevels(audioPath) {
+    function analyzeAudioLevels(audioPath, totalDuration, onProgress) {
         return new Promise((resolve, reject) => {
             const ffmpegPath = getFFmpegPath();
             console.log("[CEP] Analyzing audio levels...");
@@ -66,12 +66,34 @@ const CEP = (function() {
 
             const ffmpeg = childProcess.spawn(ffmpegPath, args);
             let stderr = "";
+            const startTime = Date.now();
 
             ffmpeg.stderr.on("data", (data) => {
-                stderr += data.toString();
+                const chunk = data.toString();
+                stderr += chunk;
+
+                // Parse progress from FFmpeg output
+                const timeMatch = chunk.match(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+                if (timeMatch && totalDuration > 0 && onProgress) {
+                    const hours = parseInt(timeMatch[1]);
+                    const mins = parseInt(timeMatch[2]);
+                    const secs = parseInt(timeMatch[3]);
+                    const currentTime = hours * 3600 + mins * 60 + secs;
+                    const percent = Math.min(99, Math.round((currentTime / totalDuration) * 100));
+
+                    // Estimate remaining time
+                    const elapsedMs = Date.now() - startTime;
+                    const estimatedTotalMs = percent > 0 ? (elapsedMs / percent) * 100 : 0;
+                    const estimatedRemainingMs = estimatedTotalMs - elapsedMs;
+                    const estimatedRemainingSec = Math.max(0, Math.ceil(estimatedRemainingMs / 1000));
+
+                    onProgress(percent, estimatedRemainingSec);
+                }
             });
 
             ffmpeg.on("close", (code) => {
+                if (onProgress) onProgress(100, 0);
+
                 // Parse volume info
                 const meanMatch = stderr.match(/mean_volume:\s*([-\d.]+)\s*dB/);
                 const maxMatch = stderr.match(/max_volume:\s*([-\d.]+)\s*dB/);
@@ -129,6 +151,7 @@ const CEP = (function() {
 
             const ffmpeg = childProcess.spawn(ffmpegPath, args);
             let stderr = "";
+            const startTime = Date.now();
 
             ffmpeg.stderr.on("data", (data) => {
                 const chunk = data.toString();
@@ -141,12 +164,19 @@ const CEP = (function() {
                     const secs = parseInt(timeMatch[3]);
                     const currentTime = hours * 3600 + mins * 60 + secs;
                     const percent = Math.min(99, Math.round((currentTime / totalDuration) * 100));
-                    onProgress(percent);
+
+                    // Estimate remaining time
+                    const elapsedMs = Date.now() - startTime;
+                    const estimatedTotalMs = percent > 0 ? (elapsedMs / percent) * 100 : 0;
+                    const estimatedRemainingMs = estimatedTotalMs - elapsedMs;
+                    const estimatedRemainingSec = Math.max(0, Math.ceil(estimatedRemainingMs / 1000));
+
+                    onProgress(percent, estimatedRemainingSec);
                 }
             });
 
             ffmpeg.on("close", (code) => {
-                if (onProgress) onProgress(100);
+                if (onProgress) onProgress(100, 0);
 
                 const segments = parseSilenceOutput(stderr);
                 console.log("[CEP] Detected " + segments.length + " silence segments");
@@ -337,9 +367,24 @@ const CEP = (function() {
             }
 
             // Step 2: Analyze audio levels (DaVinci Resolve's approach)
-            if (onProgress) onProgress("analyze", 10, null, "音声レベルを分析中...");
+            if (onProgress) onProgress("analyze", 10, null, "音声レベルを分析中... 0%");
 
-            const audioAnalysis = await analyzeAudioLevels(seqInfo.sourcePath);
+            const audioAnalysis = await analyzeAudioLevels(
+                seqInfo.sourcePath,
+                clipOutPoint,
+                (percent, remainingSec) => {
+                    let timeStr = "";
+                    if (remainingSec > 60) {
+                        const mins = Math.floor(remainingSec / 60);
+                        const secs = remainingSec % 60;
+                        timeStr = ` 残り約${mins}分${secs}秒`;
+                    } else if (remainingSec > 0) {
+                        timeStr = ` 残り約${remainingSec}秒`;
+                    }
+                    const adjustedPercent = 10 + Math.round(percent * 0.1); // 10-20%
+                    if (onProgress) onProgress("analyze", adjustedPercent, null, `音声レベルを分析中... ${percent}%${timeStr}`);
+                }
+            );
 
             if (!audioAnalysis.hasAudio) {
                 throw new Error("音声トラックがありません。クリップに音声が含まれているか確認してください。");
@@ -362,7 +407,7 @@ const CEP = (function() {
             }
 
             // Step 4: Run silence detection
-            if (onProgress) onProgress("analyze", 20, null, "無音区間を検出中...");
+            if (onProgress) onProgress("analyze", 20, null, "無音区間を検出中... 0%");
 
             const minSilenceDuration = options.minSilenceDuration || 0.3;
 
@@ -371,9 +416,17 @@ const CEP = (function() {
                 effectiveThreshold,
                 minSilenceDuration,
                 clipOutPoint,
-                (percent) => {
+                (percent, remainingSec) => {
+                    let timeStr = "";
+                    if (remainingSec > 60) {
+                        const mins = Math.floor(remainingSec / 60);
+                        const secs = remainingSec % 60;
+                        timeStr = ` 残り約${mins}分${secs}秒`;
+                    } else if (remainingSec > 0) {
+                        timeStr = ` 残り約${remainingSec}秒`;
+                    }
                     const adjustedPercent = 20 + Math.round(percent * 0.6);
-                    if (onProgress) onProgress("analyze", adjustedPercent, null, `音声を解析中... ${percent}%`);
+                    if (onProgress) onProgress("analyze", adjustedPercent, null, `無音区間を検出中... ${percent}%${timeStr}`);
                 }
             );
 
@@ -466,18 +519,19 @@ const CEP = (function() {
                 // Calculate progress
                 const progressPercent = 80 + Math.round((batchIndex / batches.length) * 18); // 80-98%
                 const elapsedMs = Date.now() - batchStartTime;
-                const avgTimePerSegment = processedCount > 0 ? elapsedMs / processedCount : 200;
+                // Use actual average if available, otherwise estimate 500ms per segment
+                const avgTimePerSegment = processedCount > 0 ? elapsedMs / processedCount : 500;
                 const remainingSegments = totalSegments - processedCount;
                 const estimatedRemainingMs = remainingSegments * avgTimePerSegment;
-                const estimatedRemainingSec = Math.ceil(estimatedRemainingMs / 1000);
+                const estimatedRemainingSec = Math.max(1, Math.ceil(estimatedRemainingMs / 1000)); // At least 1 second
 
                 // Format remaining time
-                let timeStr = "";
+                let timeStr;
                 if (estimatedRemainingSec > 60) {
                     const mins = Math.floor(estimatedRemainingSec / 60);
                     const secs = estimatedRemainingSec % 60;
                     timeStr = `残り約${mins}分${secs}秒`;
-                } else if (estimatedRemainingSec > 0) {
+                } else {
                     timeStr = `残り約${estimatedRemainingSec}秒`;
                 }
 
