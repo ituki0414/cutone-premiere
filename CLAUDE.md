@@ -50,10 +50,10 @@
 
 ## 現在のバージョン
 
-- **deleteSegmentsUsingTimeCode**: v16.2
+- **deleteSegmentsUsingTimeCode**: v16.3
   - `sequence.timebase` を直接使用（全フレームレート対応: 23.976, 29.97, etc.）
   - フレーム境界に揃えてカット（映像/音声ズレ防止）
-  - `sequence.setInPoint/setOutPoint` + `qeSeq.extract()`
+  - `qeSeq.setInPoint("")` / `qeSeq.setOutPoint("")` でクリア（再生可能に）
 
 - **processSegments**: v18.0
   - 重複実行防止（クールダウン + ハッシュチェック）
@@ -84,3 +84,4 @@ git checkout <commit-hash> -- hostscript/index.jsx  # 特定ファイルを復�
 | v16.0 | 映像/音声カット位置ズレ | - |
 | v16.1 | 29.97fps等で丸め誤差 | フレーム境界揃え追加 |
 | v16.2 | - | timebase直接使用で全fps対応 |
+| v16.3 | シーケンス再生不可 | QE APIでin/outクリア |
