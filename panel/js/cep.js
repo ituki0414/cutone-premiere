@@ -1226,6 +1226,7 @@ const CEP = (function() {
 
     /**
      * Add captions to sequence using ExtendScript
+     * If Caption API fails, automatically exports SRT and imports it
      */
     async function addCaptionsToSequence(segments) {
         console.log("[CEP] Adding captions to sequence, count:", segments.length);
@@ -1235,9 +1236,53 @@ const CEP = (function() {
         if (result && result.success) {
             console.log("[CEP] Captions added:", result.count);
             return result;
-        } else {
-            throw new Error(result?.error || "キャプションの追加に失敗しました");
         }
+
+        // Caption API failed - try SRT import method
+        console.log("[CEP] Caption API failed, trying SRT import method...");
+
+        if (result && result.needsSrtImport) {
+            try {
+                // Get sequence info for path
+                const sequenceInfo = await callExtendScript("getSequenceInfo", []);
+                let srtPath = "";
+
+                if (sequenceInfo && sequenceInfo.projectPath) {
+                    const projectDir = sequenceInfo.projectPath.replace(/[^/\\]+$/, "");
+                    srtPath = projectDir + sequenceInfo.name + "_captions.srt";
+                } else if (sequenceInfo && sequenceInfo.name) {
+                    const os = require("os");
+                    srtPath = path.join(os.tmpdir(), sequenceInfo.name + "_captions.srt");
+                } else {
+                    const os = require("os");
+                    srtPath = path.join(os.tmpdir(), "cutone_captions_" + Date.now() + ".srt");
+                }
+
+                // Export SRT
+                console.log("[CEP] Exporting SRT to:", srtPath);
+                await exportSRT(segments, srtPath);
+
+                // Import SRT into Premiere
+                console.log("[CEP] Importing SRT into Premiere...");
+                const importResult = await callExtendScript("importSRTCaptions", [srtPath]);
+
+                if (importResult && importResult.success) {
+                    console.log("[CEP] SRT import result:", importResult);
+                    return {
+                        success: true,
+                        count: segments.length,
+                        method: importResult.addedToSequence ? "srtImport" : "srtProjectOnly",
+                        message: importResult.message,
+                        srtPath: srtPath
+                    };
+                }
+            } catch (srtErr) {
+                console.error("[CEP] SRT import failed:", srtErr);
+            }
+        }
+
+        // Return the original error with debug info
+        return result || { success: false, error: "キャプションの追加に失敗しました" };
     }
 
     /**

@@ -531,44 +531,40 @@
 
             let results = [];
 
-            // Add to sequence as captions/markers
+            // Add to sequence as captions
             if (addToSeq) {
                 const addResult = await CEP.addCaptionsToSequence(transcriptionSegments);
                 console.log("[CutOne] addCaptionsToSequence result:", JSON.stringify(addResult, null, 2));
 
                 if (addResult && addResult.success) {
-                    // Show which method was used
-                    let methodLabel;
+                    // Show result based on method used
                     switch (addResult.method) {
                         case "captionTrack":
-                            methodLabel = "字幕トラック";
+                            results.push(`${addResult.count}個の字幕を追加しました`);
                             break;
-                        case "graphicsText":
-                            methodLabel = "グラフィックステキスト";
+                        case "srtImport":
+                            results.push(`SRTを字幕トラックとしてインポートしました`);
                             break;
-                        case "markers":
-                        default:
-                            methodLabel = "マーカー";
-                            // Show debug info for markers fallback
-                            if (addResult.debug) {
-                                console.log("[CutOne] Caption API Debug Info:");
-                                console.log("  - hasCaptionTracks:", addResult.debug.hasCaptionTracks);
-                                console.log("  - numTracks:", addResult.debug.captionTracksNumTracks);
-                                console.log("  - hasCreateCaptionTrack:", addResult.debug.hasCreateCaptionTrack);
-                                console.log("  - captionTrackMethods:", addResult.debug.captionTrackMethods);
-                                console.log("  - captionApiError:", addResult.debug.captionApiError);
-                                console.log("  - graphicsError:", addResult.debug.graphicsError);
+                        case "srtProjectOnly":
+                            results.push(`SRTをプロジェクトにインポートしました`);
+                            if (addResult.message) {
+                                results.push(addResult.message);
                             }
                             break;
+                        default:
+                            results.push(`${addResult.count}個の字幕を追加しました`);
                     }
-                    results.push(`${addResult.count}個の${methodLabel}を追加`);
-
-                    // If markers were used as fallback, add a note
-                    if (addResult.method === "markers" && addResult.note) {
-                        results.push("（SRTファイルをインポートすると字幕トラックになります）");
+                } else {
+                    // Caption API and SRT import both failed
+                    if (addResult && addResult.debug) {
+                        console.log("[CutOne] Caption API Debug Info:");
+                        console.log("  - hasCaptionTracks:", addResult.debug.hasCaptionTracks);
+                        console.log("  - numTracks:", addResult.debug.captionTracksNumTracks);
+                        console.log("  - hasCreateCaptionTrack:", addResult.debug.hasCreateCaptionTrack);
+                        console.log("  - captionTrackMethods:", addResult.debug.captionTrackMethods);
+                        console.log("  - captionApiError:", addResult.debug.captionApiError);
                     }
-                } else if (addResult && addResult.error) {
-                    results.push(`エラー: ${addResult.error}`);
+                    results.push(`字幕追加に失敗: ${addResult?.error || "不明なエラー"}`);
                 }
             }
 

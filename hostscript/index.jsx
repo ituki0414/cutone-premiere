@@ -2091,59 +2091,16 @@ function addCaptionsToSequence(segmentsJson) {
             debugInfo.captionApiError = captionErr.toString();
         }
 
-        // Fallback: Create Graphics Text clips as subtitles on V2 track
-        log("Caption API failed, trying Graphics Text fallback");
+        // Caption API failed - return failure with debug info
+        // Do NOT fall back to markers - user explicitly doesn't want markers
+        log("Caption API failed - returning error");
 
-        try {
-            addedCount = createTextGraphicsForCaptions(sequence, segments);
-
-            if (addedCount > 0) {
-                return JSON.stringify({
-                    success: true,
-                    count: addedCount,
-                    total: segments.length,
-                    method: "graphicsText",
-                    debug: debugInfo
-                });
-            }
-        } catch (gfxErr) {
-            log("Graphics text error: " + gfxErr);
-            debugInfo.graphicsError = gfxErr.toString();
-        }
-
-        // Final fallback: Use markers (original method)
-        log("Falling back to markers method");
-
-        var markers = sequence.markers;
-        addedCount = 0;
-
-        for (var i = 0; i < segments.length; i++) {
-            var seg = segments[i];
-            try {
-                // FIXED: Convert seconds to ticks for createMarker
-                var startTicks = Math.round(seg.start * TICKS_PER_SECOND);
-                var endTicks = Math.round(seg.end * TICKS_PER_SECOND);
-
-                var marker = markers.createMarker(startTicks);
-                if (marker) {
-                    marker.name = seg.text.substring(0, 50);
-                    marker.comments = seg.text;
-                    marker.end = { ticks: String(endTicks) };
-                    marker.setColorByIndex(3); // Yellow
-                    addedCount++;
-                }
-            } catch (markerErr) {
-                log("Marker error: " + markerErr);
-            }
-        }
-
+        // Return detailed error so CEP can handle SRT export/import
         return JSON.stringify({
-            success: true,
-            count: addedCount,
-            total: segments.length,
-            method: "markers",
-            note: "Caption API not available. Markers created instead. Import the SRT file manually for proper subtitles.",
-            debug: debugInfo
+            success: false,
+            error: "Caption Track APIが利用できません",
+            debug: debugInfo,
+            needsSrtImport: true
         });
     } catch (e) {
         log("addCaptionsToSequence error: " + e.toString());
@@ -2251,7 +2208,7 @@ function findMogrtTemplate() {
 }
 
 /**
- * Import SRT file as captions
+ * Import SRT file as captions and add to sequence
  * @param {string} srtPath - Path to SRT file
  */
 function importSRTCaptions(srtPath) {
@@ -2261,17 +2218,107 @@ function importSRTCaptions(srtPath) {
             return JSON.stringify({ success: false, error: "No active sequence" });
         }
 
-        log("=== importSRTCaptions ===");
+        log("=== importSRTCaptions v21.3 ===");
         log("Importing: " + srtPath);
 
-        // Try to import the SRT file using the project importer
-        var importResult = app.project.importFiles([srtPath], true, app.project.rootItem, false);
+        // Import the SRT file into the project
+        var importSuccess = app.project.importFiles([srtPath], true, app.project.rootItem, false);
 
-        if (importResult) {
-            log("SRT file imported successfully");
-            return JSON.stringify({ success: true, message: "SRT imported" });
+        if (!importSuccess) {
+            return JSON.stringify({ success: false, error: "SRTファイルのインポートに失敗しました" });
+        }
+
+        log("SRT file imported to project");
+
+        // Find the imported SRT item in the project
+        var srtItem = null;
+        var rootItem = app.project.rootItem;
+
+        // Get the filename from path
+        var pathParts = srtPath.split(/[/\\]/);
+        var fileName = pathParts[pathParts.length - 1];
+        var baseName = fileName.replace(".srt", "");
+
+        log("Looking for item: " + baseName);
+
+        // Search in root item children
+        for (var i = rootItem.children.numItems - 1; i >= 0 && !srtItem; i--) {
+            var item = rootItem.children[i];
+            if (item && item.name) {
+                log("  Found item: " + item.name + " (type: " + item.type + ")");
+                if (item.name === fileName || item.name === baseName || item.name.indexOf(baseName) >= 0) {
+                    srtItem = item;
+                    log("  -> MATCH!");
+                }
+            }
+        }
+
+        if (!srtItem) {
+            log("Could not find imported SRT item in project");
+            return JSON.stringify({
+                success: true,
+                message: "SRTファイルをプロジェクトにインポートしました。シーケンスにドラッグしてください。",
+                imported: true,
+                addedToSequence: false
+            });
+        }
+
+        // Try to add the SRT to the sequence as a caption track
+        log("Attempting to add SRT to sequence...");
+
+        // Method 1: Try insertClip on caption track
+        var addedToSequence = false;
+
+        try {
+            if (sequence.captionTracks && sequence.captionTracks.numTracks >= 0) {
+                // Ensure we have a caption track
+                var captionTrack = null;
+                if (sequence.captionTracks.numTracks > 0) {
+                    captionTrack = sequence.captionTracks[0];
+                } else if (sequence.createCaptionTrack) {
+                    captionTrack = sequence.createCaptionTrack();
+                }
+
+                if (captionTrack && captionTrack.insertClip) {
+                    captionTrack.insertClip(srtItem, 0);
+                    addedToSequence = true;
+                    log("Added SRT to caption track via insertClip");
+                }
+            }
+        } catch (capErr) {
+            log("Could not add to caption track: " + capErr);
+        }
+
+        // Method 2: Try overwriteClip
+        if (!addedToSequence) {
+            try {
+                if (sequence.captionTracks && sequence.captionTracks.numTracks > 0) {
+                    var captionTrack = sequence.captionTracks[0];
+                    if (captionTrack.overwriteClip) {
+                        captionTrack.overwriteClip(srtItem, 0);
+                        addedToSequence = true;
+                        log("Added SRT to caption track via overwriteClip");
+                    }
+                }
+            } catch (overErr) {
+                log("Could not overwrite to caption track: " + overErr);
+            }
+        }
+
+        if (addedToSequence) {
+            return JSON.stringify({
+                success: true,
+                message: "SRTを字幕トラックに追加しました",
+                imported: true,
+                addedToSequence: true
+            });
         } else {
-            return JSON.stringify({ success: false, error: "Import failed" });
+            return JSON.stringify({
+                success: true,
+                message: "SRTファイルをプロジェクトにインポートしました。「キャプション」パネルから読み込むか、シーケンスにドラッグしてください。",
+                imported: true,
+                addedToSequence: false
+            });
         }
     } catch (e) {
         log("importSRTCaptions error: " + e.toString());
