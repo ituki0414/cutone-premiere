@@ -302,7 +302,13 @@ const CEP = (function() {
     }
 
     async function getActiveSequence() {
-        return callExtendScript("getActiveSequence");
+        try {
+            return await callExtendScript("getActiveSequence");
+        } catch (e) {
+            // Return error as result object instead of throwing
+            console.log("[CEP] getActiveSequence error:", e.message);
+            return { success: false, error: e.message };
+        }
     }
 
     /**
