@@ -495,12 +495,13 @@ function processSegments(optionsJson) {
         var audioPaddingAfter = options.audioPaddingAfter || paddingAfter;
         var silenceAction = options.silenceAction || "delete";
         var transition = options.transition || "none";
+        var selectedTracks = options.selectedTracks || ["A1", "A2", "A3"];
         var batchIndex = options.batchIndex || 0;
         var totalBatches = options.totalBatches || 1;
         var isLastBatch = options.isLastBatch || (totalBatches === 1);
         var isBatchMode = totalBatches > 1;
 
-        log("========== processSegments v20.1 (transition support) ==========");
+        log("========== processSegments v20.2 (audio track selection) ==========");
         log("### CALL #" + callId + " | Batch " + (batchIndex + 1) + "/" + totalBatches + " ###");
 
         // Only apply duplicate protection for first batch or non-batch mode
@@ -573,6 +574,9 @@ function processSegments(optionsJson) {
             log("Audio padding: " + audioPaddingBefore + " / " + audioPaddingAfter);
         }
 
+        // Log selected tracks
+        log("Selected tracks: " + selectedTracks.join(", "));
+
         if (silenceAction === "delete") {
             if (transition !== "none" && transition !== "constantPower") {
                 // For J-Cut/L-Cut, use different padding for audio
@@ -588,7 +592,7 @@ function processSegments(optionsJson) {
             addMarkersForSegments(sequence, segments);
             processedCount = segments.length;
         } else if (silenceAction === "disable") {
-            processedCount = disableSegments(sequence, segments, paddingBefore, paddingAfter);
+            processedCount = disableSegments(sequence, segments, paddingBefore, paddingAfter, selectedTracks);
         } else if (silenceAction === "deleteKeepSpace") {
             processedCount = deleteSegmentsKeepSpace(sequence, segments, paddingBefore, paddingAfter);
         }
@@ -812,11 +816,18 @@ function addConstantPowerTransitions(sequence) {
 
 /**
  * Disable (mute) segments without deleting them
- * v20.0 - Split clips at segment boundaries and disable the silence parts
+ * v20.2 - Split clips at segment boundaries and disable the silence parts
+ * Now supports selectedTracks parameter
  */
-function disableSegments(sequence, segments, paddingBefore, paddingAfter) {
-    log("=== disableSegments v20.0 ===");
+function disableSegments(sequence, segments, paddingBefore, paddingAfter, selectedTracks) {
+    log("=== disableSegments v20.2 ===");
     log("Input segments count: " + segments.length);
+
+    // Default to all tracks if not specified
+    if (!selectedTracks || selectedTracks.length === 0) {
+        selectedTracks = ["A1", "A2", "A3"];
+    }
+    log("Selected tracks: " + selectedTracks.join(", "));
 
     // Sort segments by start time ascending
     segments.sort(function(a, b) { return a.start - b.start; });
@@ -852,7 +863,7 @@ function disableSegments(sequence, segments, paddingBefore, paddingAfter) {
         log("Disabling segment " + (i+1) + ": " + (startTicks/TICKS_PER_SECOND).toFixed(3) + "s - " + (endTicks/TICKS_PER_SECOND).toFixed(3) + "s");
 
         // Find and disable clips that overlap with this segment
-        var disabled = disableClipsInRange(sequence, startTicks, endTicks);
+        var disabled = disableClipsInRange(sequence, startTicks, endTicks, selectedTracks);
         if (disabled > 0) {
             disabledCount++;
         }
@@ -863,14 +874,39 @@ function disableSegments(sequence, segments, paddingBefore, paddingAfter) {
 }
 
 /**
- * Find clips in time range and disable them (audio only)
+ * Convert track index to track name (A1, A2, A3, etc.)
  */
-function disableClipsInRange(sequence, startTicks, endTicks) {
+function getTrackName(trackIndex) {
+    return "A" + (trackIndex + 1);
+}
+
+/**
+ * Check if a track is in the selected tracks list
+ */
+function isTrackSelected(trackIndex, selectedTracks) {
+    var trackName = getTrackName(trackIndex);
+    for (var i = 0; i < selectedTracks.length; i++) {
+        if (selectedTracks[i] === trackName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Find clips in time range and disable them (selected audio tracks only)
+ */
+function disableClipsInRange(sequence, startTicks, endTicks, selectedTracks) {
     var disabled = 0;
     var tolerance = TICKS_PER_SECOND * 0.05;
 
-    // Process audio tracks only (we want to mute audio)
+    // Process selected audio tracks only
     for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
+        // Skip if track is not selected
+        if (!isTrackSelected(a, selectedTracks)) {
+            continue;
+        }
+
         var track = sequence.audioTracks[a];
 
         for (var c = 0; c < track.clips.numItems; c++) {
@@ -885,7 +921,7 @@ function disableClipsInRange(sequence, startTicks, endTicks) {
                 try {
                     // Disable the clip (mute it)
                     clip.disabled = true;
-                    log("  Disabled audio clip on track " + a + " at " + (clipStart/TICKS_PER_SECOND).toFixed(2) + "s");
+                    log("  Disabled audio clip on " + getTrackName(a) + " at " + (clipStart/TICKS_PER_SECOND).toFixed(2) + "s");
                     disabled++;
                 } catch (e) {
                     log("  Error disabling clip: " + e.toString());

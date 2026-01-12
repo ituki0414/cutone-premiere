@@ -1,11 +1,12 @@
 /**
  * CutOne - CEP Communication Layer
- * Version 5.3 - Preview with real silence detection
+ * Version 5.4 - Audio track selection support
  *
  * Key improvement: Analyze audio levels first, then set relative threshold
  * v5.1: Added minTalkDuration - merges silence segments with short speech gaps
  * v5.2: Added sectionType - process all/in-out/selected clips
  * v5.3: Added previewWithOptions - real silence detection and waveform preview
+ * v5.4: Added selectedTracks - process only selected audio tracks
  */
 
 const childProcess = require("child_process");
@@ -660,6 +661,7 @@ const CEP = (function() {
                     audioPaddingAfter: audioPaddingAfter,
                     silenceAction: silenceAction,
                     transition: transition,
+                    selectedTracks: options.selectedTracks || ["A1", "A2", "A3"],
                     batchIndex: batchIndex,
                     totalBatches: batches.length,
                     isLastBatch: batchIndex === batches.length - 1
