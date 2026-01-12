@@ -50,13 +50,19 @@
 
 ## 現在のバージョン
 
-- **deleteSegmentsUsingTimeCode**: v16.3
+- **deleteSegmentsUsingTimeCode**: v16.4
   - `sequence.timebase` を直接使用（全フレームレート対応: 23.976, 29.97, etc.）
   - フレーム境界に揃えてカット（映像/音声ズレ防止）
   - `qeSeq.setInPoint("")` / `qeSeq.setOutPoint("")` でクリア（再生可能に）
+  - バッチ処理対応
 
-- **processSegments**: v18.0
+- **processSegments**: v19.0
   - 重複実行防止（クールダウン + ハッシュチェック）
+  - バッチモード対応（進捗表示のため）
+
+- **CEP (cep.js)**: v5.0
+  - バッチ処理で進捗表示（`カット中... X/Y件 (Z%) 残り約N秒`）
+  - セグメントを5件ずつバッチ処理
 
 ## トラブルシューティング
 
@@ -85,3 +91,5 @@ git checkout <commit-hash> -- hostscript/index.jsx  # 特定ファイルを復�
 | v16.1 | 29.97fps等で丸め誤差 | フレーム境界揃え追加 |
 | v16.2 | - | timebase直接使用で全fps対応 |
 | v16.3 | シーケンス再生不可 | QE APIでin/outクリア |
+| v16.4 | - | バッチ処理対応 |
+| v19.0 | 進捗が分からない | バッチ処理で進捗表示（%・残り時間） |
