@@ -1,0 +1,1719 @@
+/**
+ * CutOne - Premiere Pro Extension
+ * Light Theme (AutoCut-inspired)
+ */
+
+/* ============================================
+   CSS Variables
+   ============================================ */
+:root {
+    /* Background colors */
+    --bg-primary: #f6f8ff;
+    --bg-secondary: #f1f5ff;
+    --bg-card: #ffffff;
+    --bg-tertiary: #eef3ff;
+
+    /* Accent colors */
+    --accent: #5f7cf2;
+    --accent-hover: #7f97f7;
+    --accent-dark: #3f5edc;
+    --accent-light: #e9efff;
+
+    /* Text colors */
+    --text-primary: #1f273a;
+    --text-secondary: #4b5a78;
+    --text-muted: #8ea0c4;
+
+    /* UI colors */
+    --border: #e5ecff;
+    --shadow: 0 10px 30px rgba(95, 124, 242, 0.12);
+    --shadow-sm: 0 4px 12px rgba(95, 124, 242, 0.08);
+
+    /* Status colors */
+    --success: #10b981;
+    --error: #ef4444;
+    --warning: #f59e0b;
+
+    /* Sizing */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-full: 9999px;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(95, 124, 242, 0.3);
+}
+
+.logo-text {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+}
+
+.version-badge {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+}
+
+.header-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--accent);
+}
+
+.lang-btn {
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lang-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ============================================
+   Screens
+   ============================================ */
+.screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    overflow-y: auto;
+    padding-bottom: 70px;
+}
+
+/* ============================================
+   Page Header
+   ============================================ */
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.page-icon {
+    color: var(--accent);
+}
+
+.page-header span {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Feature Grid
+   ============================================ */
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.feature-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.feature-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+
+.feature-card.coming-soon {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.feature-card.coming-soon:hover {
+    border-color: var(--border);
+    box-shadow: none;
+    transform: none;
+}
+
+.feature-preview {
+    height: 80px;
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.feature-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 10px 12px 4px;
+}
+
+.feature-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 12px 12px;
+    line-height: 1.4;
+}
+
+/* Waveform Visual */
+.waveform-visual {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 50px;
+}
+
+.wave-bar {
+    width: 6px;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.wave-bar.silent {
+    background: var(--text-muted);
+    opacity: 0.4;
+}
+
+/* Caption Visual */
+.caption-visual {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 20px;
+}
+
+.caption-line {
+    height: 8px;
+    background: var(--accent-light);
+    border-radius: 4px;
+    width: 100%;
+}
+
+.caption-line.short {
+    width: 60%;
+}
+
+/* Zoom Visual */
+.zoom-visual {
+    position: relative;
+    width: 60px;
+    height: 45px;
+}
+
+.zoom-frame {
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    background: var(--bg-card);
+}
+
+.zoom-indicator {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 30px;
+    height: 22px;
+    border: 2px dashed var(--accent-hover);
+    border-radius: 2px;
+}
+
+/* B-Roll Visual */
+.broll-visual {
+    display: flex;
+    gap: 4px;
+}
+
+.broll-main {
+    width: 40px;
+    height: 30px;
+    background: var(--accent-light);
+    border-radius: 4px;
+}
+
+.broll-insert {
+    width: 25px;
+    height: 30px;
+    background: var(--accent);
+    border-radius: 4px;
+}
+
+/* Coming Soon Badge */
+.coming-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--text-muted);
+    color: white;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+}
+
+/* ============================================
+   Auth Screen
+   ============================================ */
+.auth-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px 0;
+}
+
+.auth-logo {
+    margin-bottom: 24px;
+}
+
+.auth-logo-circle {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-xl);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 16px 40px rgba(95, 124, 242, 0.25);
+}
+
+.auth-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+}
+
+.auth-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    max-width: 280px;
+    margin-bottom: 32px;
+    line-height: 1.6;
+}
+
+.auth-buttons {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn-primary {
+    width: 100%;
+    padding: 12px 20px;
+    border-radius: var(--radius-full);
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.btn-primary:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(95, 124, 242, 0.3);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-secondary {
+    width: 100%;
+    padding: 14px 24px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    border-color: var(--accent);
+    background: var(--bg-secondary);
+}
+
+.btn-tertiary {
+    width: 100%;
+    padding: 14px 24px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-tertiary:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.btn-large {
+    padding: 14px 24px;
+    font-size: 14px;
+}
+
+/* ============================================
+   Back Button
+   ============================================ */
+.back-btn {
+    position: absolute;
+    top: 60px;
+    left: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--accent);
+}
+
+/* ============================================
+   Trial & License Screens
+   ============================================ */
+.trial-content,
+.license-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-top: 40px;
+}
+
+.step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 32px;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.step-number {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.step.active .step-number {
+    background: var(--accent);
+    color: white;
+}
+
+.step-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.step.active .step-label {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.step-line {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+}
+
+.trial-content h2,
+.license-content h2 {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.form-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(95, 124, 242, 0.1);
+}
+
+.input::placeholder {
+    color: var(--text-muted);
+}
+
+.spam-notice {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* ============================================
+   Main Screen - Settings
+   ============================================ */
+.card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+}
+
+.sequence-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.sequence-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+}
+
+.sequence-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.sequence-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sequence-duration {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Settings Section
+   ============================================ */
+.settings-section,
+.options-section {
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.slider-group {
+    margin-bottom: 18px;
+}
+
+.slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.slider-header label {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.slider-value {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.slider {
+    width: 100%;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--bg-secondary);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(95, 124, 242, 0.3);
+    transition: transform 0.2s;
+}
+
+.slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.slider-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+/* ============================================
+   Options
+   ============================================ */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.checkbox-text {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Action Buttons
+   ============================================ */
+.action-buttons {
+    margin-top: 10px;
+    margin-bottom: 20px;
+}
+
+/* ============================================
+   Results Section
+   ============================================ */
+.results-section {
+    margin-top: 10px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    padding: 14px 10px;
+    text-align: center;
+}
+
+.stat-value {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.stat-highlight {
+    background: var(--accent-light);
+    border-color: var(--accent);
+}
+
+.stat-highlight .stat-value {
+    color: var(--accent);
+}
+
+/* ============================================
+   Status Bar
+   ============================================ */
+.status-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 100;
+}
+
+.status-left {
+    display: flex;
+    align-items: center;
+}
+
+.trial-status {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.status-right {
+    display: flex;
+    gap: 8px;
+}
+
+.status-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.status-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--bg-secondary);
+}
+
+/* ============================================
+   Overlay
+   ============================================ */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(246, 248, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.overlay-content {
+    text-align: center;
+}
+
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--bg-secondary);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.processing-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ============================================
+   Toast
+   ============================================ */
+.toast {
+    position: fixed;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text-primary);
+    color: white;
+    padding: 12px 20px;
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 8px 24px rgba(31, 39, 58, 0.2);
+    z-index: 1001;
+    animation: slideUp 0.3s ease;
+}
+
+.toast.error {
+    background: var(--error);
+}
+
+.toast.success {
+    background: var(--success);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* ============================================
+   Scrollbar
+   ============================================ */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* ============================================
+   Silence Screen - Page Header
+   ============================================ */
+.silence-header {
+    margin-left: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.page-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ============================================
+   Sequence Info Bar
+   ============================================ */
+.sequence-info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-left: 16px;
+    margin-right: 16px;
+}
+
+.sequence-info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.sequence-info-item svg {
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Wizard Steps
+   ============================================ */
+.wizard-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding: 0 16px;
+}
+
+.wizard-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.5;
+    transition: all 0.3s;
+}
+
+.wizard-step.active {
+    opacity: 1;
+}
+
+.wizard-step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: all 0.3s;
+}
+
+.wizard-step.active .wizard-step-dot {
+    background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(95, 124, 242, 0.2);
+}
+
+.wizard-step.completed .wizard-step-dot {
+    background: var(--success);
+}
+
+.wizard-step span {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.wizard-step.active span {
+    color: var(--text-primary);
+}
+
+.wizard-step-line {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+}
+
+/* ============================================
+   Section Definition
+   ============================================ */
+.section-define {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.section-define-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    color: var(--accent);
+}
+
+.section-define-header span {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.section-define-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+/* ============================================
+   Section Type Buttons
+   ============================================ */
+.section-type-btns {
+    display: flex;
+    gap: 8px;
+}
+
+.section-type-btn {
+    flex: 1;
+    padding: 10px 8px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.section-type-btn:hover {
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+}
+
+.section-type-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* ============================================
+   Timeline Container
+   ============================================ */
+.timeline-container {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.timeline-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.timeline-icon {
+    color: var(--accent);
+}
+
+.timeline-start,
+.timeline-end {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.timeline-progress {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-secondary);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+}
+
+.timeline-progress::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 30%;
+    background: var(--accent);
+    border-radius: 2px;
+}
+
+/* ============================================
+   Audio Tracks
+   ============================================ */
+.audio-tracks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.audio-track {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.track-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    min-width: 50px;
+}
+
+.track-checkbox input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.track-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.track-waveform {
+    flex: 1;
+    height: 32px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    position: relative;
+}
+
+.waveform-placeholder {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg,
+        var(--accent-light) 0%,
+        var(--accent-light) 20%,
+        var(--bg-tertiary) 20%,
+        var(--bg-tertiary) 25%,
+        var(--accent-light) 25%,
+        var(--accent-light) 60%,
+        var(--bg-tertiary) 60%,
+        var(--bg-tertiary) 68%,
+        var(--accent-light) 68%,
+        var(--accent-light) 100%
+    );
+    opacity: 0.7;
+}
+
+/* ============================================
+   Timeline Legend
+   ============================================ */
+.timeline-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.legend-color.analyzed {
+    background: var(--accent-light);
+    border: 1px solid var(--accent);
+}
+
+.legend-color.ignored {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+}
+
+.legend-color.affected {
+    background: var(--error);
+    opacity: 0.6;
+}
+
+.legend-item span:not(.legend-color) {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Wizard Actions
+   ============================================ */
+.wizard-actions {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    position: relative;
+    z-index: 10;
+}
+
+.wizard-actions .btn-secondary {
+    width: auto;
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.wizard-actions .btn-primary {
+    flex: 1;
+}
+
+.wizard-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+/* ============================================
+   Wizard Content
+   ============================================ */
+.wizard-content {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================
+   Settings Card
+   ============================================ */
+.settings-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.settings-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.settings-card-subtitle {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.settings-card-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+/* ============================================
+   Threshold Slider Row
+   ============================================ */
+.threshold-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.threshold-slider-row svg {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.threshold-slider-row .slider {
+    flex: 1;
+}
+
+.threshold-value {
+    display: block;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+/* ============================================
+   Preset Buttons
+   ============================================ */
+.preset-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.preset-btn {
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.preset-btn:hover {
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+}
+
+.preset-btn.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: white;
+}
+
+/* ============================================
+   Input Groups
+   ============================================ */
+.input-group {
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 3px solid var(--accent);
+}
+
+.input-group:last-child {
+    margin-bottom: 0;
+}
+
+.input-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.input-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.input-with-unit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-number {
+    width: 100%;
+    max-width: 120px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.input-number:focus {
+    border-color: var(--accent);
+    background: var(--bg-card);
+}
+
+.input-unit {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Radio Groups
+   ============================================ */
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.radio-group.horizontal {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.radio-label input[type="radio"] {
+    display: none;
+}
+
+.radio-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg-secondary);
+    position: relative;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.radio-label input[type="radio"]:checked + .radio-dot {
+    border-color: var(--accent);
+    background: var(--bg-card);
+}
+
+.radio-label input[type="radio"]:checked + .radio-dot::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.radio-label span:not(.radio-dot) {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Preview Section
+   ============================================ */
+.preview-card {
+    background: var(--bg-card);
+}
+
+.preview-waveform {
+    height: 120px;
+    background: linear-gradient(180deg,
+        rgba(239, 68, 68, 0.3) 0%,
+        rgba(16, 185, 129, 0.3) 30%,
+        rgba(239, 68, 68, 0.3) 50%,
+        rgba(16, 185, 129, 0.3) 70%,
+        rgba(239, 68, 68, 0.3) 100%
+    );
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-preview {
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-preview:hover {
+    border-color: var(--accent);
+    background: white;
+}
+
+.preview-timeline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.preview-time-start,
+.preview-time-end {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.preview-progress {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-secondary);
+    border-radius: 2px;
+}
+
+.preview-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.preview-legend .legend-color.margin {
+    background: var(--success);
+}
+
+.preview-legend .legend-color.delete {
+    background: var(--error);
+}
+
+.preview-legend .legend-color.gap {
+    background: repeating-linear-gradient(
+        45deg,
+        var(--bg-tertiary),
+        var(--bg-tertiary) 2px,
+        var(--border) 2px,
+        var(--border) 4px
+    );
+}
+
+.preview-legend .legend-color.threshold {
+    width: 20px;
+    height: 2px;
+    background: var(--error);
+    border-radius: 0;
+}
+
+/* ============================================
+   Sequence Bar
+   ============================================ */
+.sequence-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+}
+
+.sequence-time {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.sequence-progress {
+    flex: 1;
+    height: 24px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.sequence-markers {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+}
+
+/* ============================================
+   Action Buttons (Step 2)
+   ============================================ */
+.wizard-actions .btn-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 16px;
+    width: auto;
+    min-width: 80px;
+    flex-shrink: 0;
+    font-size: 13px;
+}
+
+.wizard-actions .btn-cut {
+    flex: 1;
+    background: #f97316 !important;
+    padding: 14px 20px;
+    font-size: 14px;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    white-space: nowrap;
+    position: relative;
+    z-index: 9999 !important;
+    border: none;
+}
+
+.wizard-actions .btn-cut:hover {
+    background: #ea580c;
+}

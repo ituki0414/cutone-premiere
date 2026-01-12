@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CutOne</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="js/CSInterface.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                </div>
+                <span class="logo-text">CUTONE</span>
+                <span class="version-badge">v1.0</span>
+            </div>
+            <div class="header-actions">
+                <button class="lang-btn" id="langBtn" title="Language">
+                    <span id="langLabel">JA</span>
+                </button>
+                <button class="icon-btn" id="settingsBtn" title="Settings">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Auth Screen -->
+        <div id="authScreen" class="screen">
+            <div class="auth-content">
+                <div class="auth-logo">
+                    <div class="auth-logo-circle">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                    </div>
+                </div>
+                <h1 class="auth-title" data-i18n="auth.title">AIで編集を10倍速く</h1>
+                <p class="auth-subtitle" data-i18n="auth.subtitle">無音カット、字幕生成、ズーム、Bロール挿入など — ワンクリックで実行</p>
+
+                <div class="auth-buttons">
+                    <button class="btn-primary" id="startTrialBtn" data-i18n="auth.startTrial">
+                        14日間無料トライアル
+                    </button>
+                    <button class="btn-secondary" id="enterLicenseBtn" data-i18n="auth.haveLicense">
+                        ライセンスキーを持っている
+                    </button>
+                    <button class="btn-tertiary" id="buyLicenseBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        <span data-i18n="auth.buyLicense">ライセンスを購入</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trial Email Screen -->
+        <div id="trialScreen" class="screen hidden">
+            <button class="back-btn" id="backFromTrialBtn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <div class="trial-content">
+                <div class="step-indicator">
+                    <div class="step active">
+                        <span class="step-number">1</span>
+                        <span class="step-label" data-i18n="trial.step1">メール</span>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step">
+                        <span class="step-number">2</span>
+                        <span class="step-label" data-i18n="trial.step2">有効化</span>
+                    </div>
+                </div>
+
+                <h2 data-i18n="trial.title">14日間無料トライアル</h2>
+                <p class="form-subtitle" data-i18n="trial.subtitle">メールアドレスを入力してトライアルを開始</p>
+
+                <div class="form-group">
+                    <input type="email" id="trialEmail" class="input" placeholder="your@email.com" data-i18n-placeholder="trial.email">
+                </div>
+
+                <button class="btn-primary" id="activateTrialBtn" data-i18n="trial.activate">
+                    トライアルを開始
+                </button>
+
+                <p class="spam-notice">
+                    ※ メールが届かない場合は迷惑メールフォルダをご確認ください
+                </p>
+            </div>
+        </div>
+
+        <!-- License Key Screen -->
+        <div id="licenseScreen" class="screen hidden">
+            <button class="back-btn" id="backFromLicenseBtn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <div class="license-content">
+                <h2 data-i18n="license.title">ライセンスキーを入力</h2>
+                <p class="form-subtitle" data-i18n="license.subtitle">メールアドレスとライセンスキーを入力</p>
+
+                <div class="form-group">
+                    <label data-i18n="license.email">メールアドレス</label>
+                    <input type="email" id="licenseEmail" class="input" placeholder="your@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label data-i18n="license.key">ライセンスキー</label>
+                    <input type="text" id="licenseKey" class="input" placeholder="XXXX-XXXX-XXXX-XXXX" data-i18n-placeholder="license.keyPlaceholder">
+                </div>
+
+                <button class="btn-primary" id="activateLicenseBtn" data-i18n="license.activate">
+                    有効化
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Screen (Feature Cards) -->
+        <div id="mainScreen" class="screen hidden">
+            <!-- Page Title -->
+            <div class="page-header">
+                <svg class="page-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span data-i18n="home.title">ホーム</span>
+            </div>
+
+            <!-- Feature Cards Grid -->
+            <div class="feature-grid">
+                <!-- Silence Cut Card -->
+                <div class="feature-card" id="featureSilence">
+                    <div class="feature-preview silence-preview">
+                        <div class="waveform-visual">
+                            <div class="wave-bar" style="height: 60%"></div>
+                            <div class="wave-bar" style="height: 80%"></div>
+                            <div class="wave-bar silent" style="height: 15%"></div>
+                            <div class="wave-bar silent" style="height: 10%"></div>
+                            <div class="wave-bar silent" style="height: 12%"></div>
+                            <div class="wave-bar" style="height: 70%"></div>
+                            <div class="wave-bar" style="height: 90%"></div>
+                            <div class="wave-bar" style="height: 75%"></div>
+                            <div class="wave-bar silent" style="height: 8%"></div>
+                            <div class="wave-bar silent" style="height: 15%"></div>
+                            <div class="wave-bar" style="height: 85%"></div>
+                            <div class="wave-bar" style="height: 65%"></div>
+                        </div>
+                    </div>
+                    <h3 class="feature-title" data-i18n="feature.silence">無音カット</h3>
+                    <p class="feature-desc" data-i18n="feature.silenceDesc">タイムラインから無音部分を自動削除</p>
+                </div>
+
+                <!-- Coming Soon Cards -->
+                <div class="feature-card coming-soon">
+                    <div class="feature-preview caption-preview">
+                        <div class="caption-visual">
+                            <div class="caption-line"></div>
+                            <div class="caption-line short"></div>
+                        </div>
+                        <span class="coming-badge" data-i18n="feature.comingSoon">近日公開</span>
+                    </div>
+                    <h3 class="feature-title" data-i18n="feature.captions">自動字幕</h3>
+                    <p class="feature-desc" data-i18n="feature.captionsDesc">AIで字幕を自動生成</p>
+                </div>
+
+                <div class="feature-card coming-soon">
+                    <div class="feature-preview zoom-preview">
+                        <div class="zoom-visual">
+                            <div class="zoom-frame"></div>
+                            <div class="zoom-indicator"></div>
+                        </div>
+                        <span class="coming-badge" data-i18n="feature.comingSoon">近日公開</span>
+                    </div>
+                    <h3 class="feature-title" data-i18n="feature.zoom">自動ズーム</h3>
+                    <p class="feature-desc" data-i18n="feature.zoomDesc">自動ズームエフェクト追加</p>
+                </div>
+
+                <div class="feature-card coming-soon">
+                    <div class="feature-preview broll-preview">
+                        <div class="broll-visual">
+                            <div class="broll-main"></div>
+                            <div class="broll-insert"></div>
+                        </div>
+                        <span class="coming-badge" data-i18n="feature.comingSoon">近日公開</span>
+                    </div>
+                    <h3 class="feature-title" data-i18n="feature.broll">自動Bロール</h3>
+                    <p class="feature-desc" data-i18n="feature.brollDesc">AIでBロールを自動挿入</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Silence Cut Screen -->
+        <div id="silenceScreen" class="screen hidden">
+            <button class="back-btn" id="backFromSilenceBtn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </button>
+
+            <!-- Page Title -->
+            <div class="page-header silence-header">
+                <div class="page-header-left">
+                    <svg class="page-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                    </svg>
+                    <span data-i18n="feature.silence">無音カット</span>
+                </div>
+                <button class="icon-btn" id="refreshBtn" title="Refresh">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Sequence Info Bar -->
+            <div class="sequence-info-bar">
+                <div class="sequence-info-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                        <line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/>
+                        <line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/>
+                        <line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/>
+                        <line x1="17" y1="7" x2="22" y2="7"/>
+                    </svg>
+                    <span id="sequenceName" data-i18n="silence.noSequence">シーケンス未選択</span>
+                </div>
+                <div class="sequence-info-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span id="sequenceDuration">00:00:00</span>
+                </div>
+            </div>
+
+            <!-- Step Indicator -->
+            <div class="wizard-steps">
+                <div class="wizard-step active" id="step1">
+                    <div class="wizard-step-dot"></div>
+                    <span data-i18n="silence.step1">セクションを定義</span>
+                </div>
+                <div class="wizard-step-line"></div>
+                <div class="wizard-step" id="step2">
+                    <div class="wizard-step-dot"></div>
+                    <span data-i18n="silence.step2">設定をカスタマイズ</span>
+                </div>
+            </div>
+
+            <!-- Step 1: Section Definition -->
+            <div class="wizard-content" id="stepContent1">
+                <div class="section-define">
+                    <div class="section-define-header">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <span data-i18n="silence.defineSection">セクションを定義</span>
+                    </div>
+                    <p class="section-define-desc" data-i18n="silence.defineSectionDesc">処理するオーディオセクションを選択してください</p>
+
+                    <!-- Section Type Buttons -->
+                    <div class="section-type-btns">
+                        <button class="section-type-btn active" id="sectionTypeAll" data-type="all">
+                            <span data-i18n="silence.entireSequence">全体のシーケンス</span>
+                        </button>
+                        <button class="section-type-btn" id="sectionTypeInOut" data-type="inout">
+                            <span data-i18n="silence.inOutPoints">イン/アウトポイント</span>
+                        </button>
+                        <button class="section-type-btn" id="sectionTypeClips" data-type="clips">
+                            <span data-i18n="silence.selectedClips">選択したクリップ</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Timeline Visualization -->
+                <div class="timeline-container">
+                    <div class="timeline-header">
+                        <div class="timeline-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="6" width="20" height="12" rx="2"/>
+                                <path d="M12 6v12"/>
+                            </svg>
+                        </div>
+                        <span class="timeline-start" id="timelineStart">00:00:00</span>
+                        <div class="timeline-progress"></div>
+                        <span class="timeline-end" id="timelineEnd">00:00:00</span>
+                    </div>
+
+                    <!-- Audio Tracks -->
+                    <div class="audio-tracks" id="audioTracks">
+                        <div class="audio-track">
+                            <label class="track-checkbox">
+                                <input type="checkbox" checked data-track="A1">
+                                <span class="track-label">A1</span>
+                            </label>
+                            <div class="track-waveform">
+                                <div class="waveform-placeholder"></div>
+                            </div>
+                        </div>
+                        <div class="audio-track">
+                            <label class="track-checkbox">
+                                <input type="checkbox" checked data-track="A2">
+                                <span class="track-label">A2</span>
+                            </label>
+                            <div class="track-waveform">
+                                <div class="waveform-placeholder"></div>
+                            </div>
+                        </div>
+                        <div class="audio-track">
+                            <label class="track-checkbox">
+                                <input type="checkbox" checked data-track="A3">
+                                <span class="track-label">A3</span>
+                            </label>
+                            <div class="track-waveform">
+                                <div class="waveform-placeholder"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="timeline-legend">
+                        <div class="legend-item">
+                            <span class="legend-color analyzed"></span>
+                            <span data-i18n="silence.analyzedSection">分析されたセクション</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color ignored"></span>
+                            <span data-i18n="silence.ignoredSection">無視されたセクション</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color affected"></span>
+                            <span data-i18n="silence.affectedSection">処理対象セクション</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Next Button -->
+                <div class="wizard-actions">
+                    <p class="wizard-hint" data-i18n="silence.defineHint">オーディオセクションを定義してください</p>
+                    <button class="btn-primary btn-large" id="nextStepBtn">
+                        <span data-i18n="silence.confirmSection">セクションを確認</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Settings -->
+            <div class="wizard-content hidden" id="stepContent2">
+                <!-- Noise Threshold Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title" data-i18n="settings.noiseThreshold">ノイズ閾値</h3>
+                    <p class="settings-card-desc" data-i18n="settings.noiseThresholdDesc">無音を特定するための音量の設定</p>
+                    <div class="threshold-slider-row">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        </svg>
+                        <input type="range" id="thresholdSlider" class="slider" min="-60" max="-10" value="-35">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    </div>
+                    <span class="threshold-value" id="thresholdValue">-35dB</span>
+                </div>
+
+                <!-- Pacing Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title" data-i18n="settings.pacing">ペーシング</h3>
+                    <p class="settings-card-subtitle" data-i18n="settings.defaultPreset">デフォルトプリセット</p>
+                    <div class="preset-btns">
+                        <button class="preset-btn" data-preset="calm" data-i18n="settings.presetCalm">落ち着いた</button>
+                        <button class="preset-btn" data-preset="careful" data-i18n="settings.presetCareful">慎重な</button>
+                        <button class="preset-btn active" data-preset="good" data-i18n="settings.presetGood">ペースの良い</button>
+                        <button class="preset-btn" data-preset="energetic" data-i18n="settings.presetEnergetic">エネルギッシュ</button>
+                        <button class="preset-btn" data-preset="quick" data-i18n="settings.presetQuick">軽快な</button>
+                    </div>
+                </div>
+
+                <!-- Silence Duration Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title" data-i18n="settings.silenceDuration">無音の持続時間</h3>
+
+                    <div class="input-group">
+                        <label data-i18n="settings.removeLongSilence">無音が長い場合に削除</label>
+                        <p class="input-hint" data-i18n="settings.removeLongSilenceHint">無音を削除する最小期間（ミリ秒）</p>
+                        <div class="input-with-unit">
+                            <input type="number" id="minSilenceDuration" class="input-number" value="300">
+                            <span class="input-unit" data-i18n="settings.ms">ミリ秒</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label data-i18n="settings.keepLongTalk">会話が長い場合は保持</label>
+                        <p class="input-hint" data-i18n="settings.keepLongTalkHint">トークセグメントを残す最小期間（ミリ秒）</p>
+                        <div class="input-with-unit">
+                            <input type="number" id="minTalkDuration" class="input-number" value="200">
+                            <span class="input-unit" data-i18n="settings.ms">ミリ秒</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Padding Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title" data-i18n="settings.padding">パディング</h3>
+
+                    <div class="input-group">
+                        <label data-i18n="settings.paddingBefore">前のパディング</label>
+                        <p class="input-hint" data-i18n="settings.paddingBeforeHint">会話開始をスムーズにするためのノイズ前の無音時間</p>
+                        <div class="input-with-unit">
+                            <input type="number" id="paddingBefore" class="input-number" value="200">
+                            <span class="input-unit" data-i18n="settings.ms">ミリ秒</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label data-i18n="settings.paddingAfter">後のパディング</label>
+                        <p class="input-hint" data-i18n="settings.paddingAfterHint">会話終了をスムーズにするためのノイズ後の無音時間</p>
+                        <div class="input-with-unit">
+                            <input type="number" id="paddingAfter" class="input-number" value="200">
+                            <span class="input-unit" data-i18n="settings.ms">ミリ秒</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Silence Management Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title" data-i18n="settings.silenceManagement">無音の管理</h3>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="silenceAction" value="delete" checked>
+                            <span class="radio-dot"></span>
+                            <span data-i18n="settings.deleteSilence">無音を削除</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="silenceAction" value="keep">
+                            <span class="radio-dot"></span>
+                            <span data-i18n="settings.keepSilence">無音を保持</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="silenceAction" value="disable">
+                            <span class="radio-dot"></span>
+                            <span data-i18n="settings.disableSilence">無音を無効化</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="silenceAction" value="deleteKeepSpace">
+                            <span class="radio-dot"></span>
+                            <span data-i18n="settings.deleteKeepSpace">無音を削除してスペースを保持</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Transition Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title" data-i18n="settings.transition">トランジション</h3>
+                    <p class="settings-card-desc" data-i18n="settings.transitionDesc">すべてのカットはJ-Cut、L-Cut、または両方であることが望ましい場合があります</p>
+                    <div class="radio-group horizontal">
+                        <label class="radio-label">
+                            <input type="radio" name="transition" value="none" checked>
+                            <span class="radio-dot"></span>
+                            <span data-i18n="settings.transitionNone">なし</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="transition" value="jcut">
+                            <span class="radio-dot"></span>
+                            <span>J-Cut</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="transition" value="lcut">
+                            <span class="radio-dot"></span>
+                            <span>L-Cut</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="transition" value="both">
+                            <span class="radio-dot"></span>
+                            <span data-i18n="settings.transitionBoth">両方</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="transition" value="constantPower">
+                            <span class="radio-dot"></span>
+                            <span data-i18n="settings.constantPower">コンスタントパワー</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Preview Section -->
+                <div class="settings-card preview-card">
+                    <h3 class="settings-card-title" data-i18n="settings.preview">プレビュー</h3>
+                    <p class="settings-card-desc" data-i18n="settings.previewDesc">保持および削除されたセグメントを表示します</p>
+                    <div class="preview-waveform" id="previewWaveform">
+                        <button class="btn-preview" id="generatePreviewBtn">
+                            <span data-i18n="settings.generatePreview">プレビューを生成</span>
+                        </button>
+                    </div>
+                    <div class="preview-timeline">
+                        <span class="preview-time-start" id="previewStart">00:00:00</span>
+                        <div class="preview-progress" id="previewProgress"></div>
+                        <span class="preview-time-end" id="previewEnd">00:00:00</span>
+                    </div>
+                    <div class="preview-legend">
+                        <div class="legend-item">
+                            <span class="legend-color margin"></span>
+                            <span data-i18n="settings.legendMargin">マージン</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color delete"></span>
+                            <span data-i18n="settings.legendDelete">削除</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color gap"></span>
+                            <span data-i18n="settings.legendGap">クリップ間のギャップ</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color threshold"></span>
+                            <span data-i18n="settings.legendThreshold">ノイズ閾値</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sequence Info Bar -->
+                <div class="sequence-bar">
+                    <span class="sequence-time" id="sequenceStart">00:00:00</span>
+                    <div class="sequence-progress" id="sequenceProgress">
+                        <div class="sequence-markers"></div>
+                    </div>
+                    <span class="sequence-time" id="sequenceEnd">00:00:00</span>
+                </div>
+
+                <!-- Action Button -->
+                <div class="wizard-actions">
+                    <button class="btn-secondary btn-back" id="prevStepBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        <span data-i18n="silence.back">戻る</span>
+                    </button>
+                    <button class="btn-primary btn-cut" id="processBtn" onclick="console.log('INLINE ONCLICK FIRED'); if(window.AppFunctions && window.AppFunctions.forceProcess) { window.AppFunctions.forceProcess(); } else { alert('AppFunctions not available'); }">
+                        <span data-i18n="settings.cutAndDelete">無音をカットして削除</span>
+                    </button>
+                </div>
+
+                <!-- Results -->
+                <div class="results-section hidden" id="resultsSection">
+                    <h3 class="section-title" data-i18n="main.sectionResults">処理結果</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-value" id="originalDuration">--:--</span>
+                            <span class="stat-label" data-i18n="main.original">元の長さ</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-value" id="newDuration">--:--</span>
+                            <span class="stat-label" data-i18n="main.afterCut">カット後</span>
+                        </div>
+                        <div class="stat-card stat-highlight">
+                            <span class="stat-value" id="savedPercent">--%</span>
+                            <span class="stat-label" data-i18n="main.saved">削減</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Status Bar -->
+        <div class="status-bar hidden" id="statusBar">
+            <div class="status-left">
+                <span class="trial-status" id="trialStatus">14 days left</span>
+            </div>
+            <div class="status-right">
+                <button class="status-btn" id="upgradeBtn" title="Upgrade">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                </button>
+                <button class="status-btn" id="helpBtn" title="Help">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Processing Overlay -->
+        <div class="overlay hidden" id="processingOverlay">
+            <div class="overlay-content">
+                <div class="spinner"></div>
+                <p class="processing-text" id="processingText">処理中...</p>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div class="toast hidden" id="toast">
+            <span class="toast-message" id="toastMessage"></span>
+        </div>
+    </div>
+
+    <script src="js/i18n.js"></script>
+    <script src="js/license.js"></script>
+    <script src="js/cep.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
