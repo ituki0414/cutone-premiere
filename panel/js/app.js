@@ -1123,6 +1123,9 @@
     async function refreshSequenceInfo() {
         console.log("[CutOne] Refreshing sequence info...");
 
+        // DEBUG: Show that we're trying to get sequence
+        elements.sequenceName.textContent = "取得中...";
+
         try {
             const result = await CEP.getActiveSequence();
             console.log("[CutOne] getActiveSequence result:", result);
@@ -1134,13 +1137,16 @@
                 console.log("[CutOne] Sequence loaded:", result.name, result.durationFormatted);
             } else {
                 currentSequence = null;
-                elements.sequenceName.textContent = I18n.t("main.noSequence");
+                // DEBUG: Show actual result
+                elements.sequenceName.textContent = "結果: " + JSON.stringify(result);
                 elements.sequenceDuration.textContent = "--:--";
                 console.log("[CutOne] No sequence found or error:", result);
             }
         } catch (e) {
             currentSequence = null;
-            elements.sequenceName.textContent = I18n.t("main.noSequence");
+            // DEBUG: Show actual error
+            const errorMsg = e.message || e.toString() || "unknown";
+            elements.sequenceName.textContent = "エラー: " + errorMsg;
             elements.sequenceDuration.textContent = "--:--";
             console.error("[CutOne] Error getting sequence:", e);
         }
