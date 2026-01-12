@@ -315,12 +315,34 @@ function testSingleExtract() {
 // ============================================
 function getActiveSequence() {
     try {
+        log("=== getActiveSequence ===");
+        log("app.project: " + (app.project ? "exists" : "null"));
+
+        if (!app.project) {
+            return JSON.stringify({ success: false, error: "No project open" });
+        }
+
+        log("app.project.activeSequence: " + (app.project.activeSequence ? "exists" : "null"));
+
         var sequence = app.project.activeSequence;
         if (!sequence) {
-            return JSON.stringify({ success: false, error: "No active sequence" });
+            // Try to find any sequence in the project
+            log("No active sequence, checking project items...");
+            var rootItem = app.project.rootItem;
+            if (rootItem && rootItem.children) {
+                log("Project has " + rootItem.children.numItems + " items");
+                for (var i = 0; i < rootItem.children.numItems; i++) {
+                    var item = rootItem.children[i];
+                    if (item && item.type === ProjectItemType.SEQUENCE) {
+                        log("Found sequence: " + item.name);
+                    }
+                }
+            }
+            return JSON.stringify({ success: false, error: "No active sequence. Please open a sequence in the Timeline panel." });
         }
 
         var durationSeconds = getSequenceDuration(sequence);
+        log("Sequence: " + sequence.name + ", duration: " + durationSeconds);
 
         return JSON.stringify({
             success: true,
@@ -331,6 +353,7 @@ function getActiveSequence() {
             durationFormatted: formatTime(durationSeconds)
         });
     } catch (e) {
+        log("getActiveSequence error: " + e.toString());
         return JSON.stringify({ success: false, error: e.toString() });
     }
 }
