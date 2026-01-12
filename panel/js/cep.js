@@ -1,9 +1,10 @@
 /**
  * CutOne - CEP Communication Layer
- * Version 5.1 - minTalkDuration support
+ * Version 5.2 - Section type support
  *
  * Key improvement: Analyze audio levels first, then set relative threshold
  * v5.1: Added minTalkDuration - merges silence segments with short speech gaps
+ * v5.2: Added sectionType - process all/in-out/selected clips
  */
 
 const childProcess = require("child_process");
@@ -352,26 +353,79 @@ const CEP = (function() {
                 throw new Error("シーケンス情報を取得できませんでした");
             }
 
-            const clipStartInSequence = seqInfo.clipStartInSequence || 0;
-            const clipEndInSequence = seqInfo.clipEndInSequence || seqInfo.duration || 0;
-            const clipInPoint = seqInfo.clipInPoint || 0;
-            const clipOutPoint = seqInfo.clipOutPoint || clipEndInSequence;
+            let clipStartInSequence = seqInfo.clipStartInSequence || 0;
+            let clipEndInSequence = seqInfo.clipEndInSequence || seqInfo.duration || 0;
+            let clipInPoint = seqInfo.clipInPoint || 0;
+            let clipOutPoint = seqInfo.clipOutPoint || clipEndInSequence;
+            let sourcePath = seqInfo.sourcePath;
+
+            // Step 1.5: Apply section type filter
+            const sectionType = options.sectionType || "all";
+            console.log("[CEP] Section type: " + sectionType);
+
+            if (sectionType === "inout") {
+                // Process only between in/out points
+                const seqInPoint = seqInfo.seqInPoint;
+                const seqOutPoint = seqInfo.seqOutPoint;
+
+                if (seqInPoint < 0 || seqOutPoint < 0) {
+                    throw new Error("シーケンスにイン/アウトポイントが設定されていません。\nキーボードの「I」と「O」で設定してください。");
+                }
+
+                console.log("[CEP] Using in/out points: " + seqInPoint.toFixed(2) + " - " + seqOutPoint.toFixed(2));
+
+                // Adjust clip range to in/out points
+                clipStartInSequence = Math.max(clipStartInSequence, seqInPoint);
+                clipEndInSequence = Math.min(clipEndInSequence, seqOutPoint);
+
+                // Adjust source points accordingly
+                const offsetStart = seqInPoint - seqInfo.clipStartInSequence;
+                const offsetEnd = seqOutPoint - seqInfo.clipStartInSequence;
+                clipInPoint = seqInfo.clipInPoint + Math.max(0, offsetStart);
+                clipOutPoint = seqInfo.clipInPoint + Math.min(seqInfo.clipOutPoint - seqInfo.clipInPoint, offsetEnd);
+
+            } else if (sectionType === "selected") {
+                // Process only selected clips
+                const selectedClips = seqInfo.selectedClips;
+
+                if (!selectedClips || selectedClips.count === 0) {
+                    throw new Error("クリップが選択されていません。\n処理したいクリップを選択してください。");
+                }
+
+                console.log("[CEP] Using selected clips: " + selectedClips.count + " clips, range: " + selectedClips.start.toFixed(2) + " - " + selectedClips.end.toFixed(2));
+
+                // Use selected clips range
+                clipStartInSequence = selectedClips.start;
+                clipEndInSequence = selectedClips.end;
+
+                // Use selected clip's source path if available
+                if (selectedClips.sourcePath) {
+                    sourcePath = selectedClips.sourcePath;
+                }
+
+                // Adjust source points accordingly
+                const offsetStart = selectedClips.start - seqInfo.clipStartInSequence;
+                const offsetEnd = selectedClips.end - seqInfo.clipStartInSequence;
+                clipInPoint = seqInfo.clipInPoint + Math.max(0, offsetStart);
+                clipOutPoint = seqInfo.clipInPoint + Math.min(seqInfo.clipOutPoint - seqInfo.clipInPoint, offsetEnd);
+            }
+
             const originalDuration = clipEndInSequence - clipStartInSequence;
 
-            console.log("[CEP] Clip timing:");
+            console.log("[CEP] Processing range:");
             console.log("[CEP]   Sequence: " + clipStartInSequence.toFixed(2) + " - " + clipEndInSequence.toFixed(2));
             console.log("[CEP]   Source: " + clipInPoint.toFixed(2) + " - " + clipOutPoint.toFixed(2));
             console.log("[CEP]   Duration: " + originalDuration.toFixed(2) + "s");
 
             if (originalDuration <= 0) {
-                throw new Error("シーケンスの長さが0です");
+                throw new Error("処理範囲の長さが0です");
             }
 
             // Step 2: Analyze audio levels (DaVinci Resolve's approach)
             if (onProgress) onProgress("analyze", 10, null, "音声レベルを分析中... 0%");
 
             const audioAnalysis = await analyzeAudioLevels(
-                seqInfo.sourcePath,
+                sourcePath,
                 clipOutPoint,
                 (percent, remainingSec) => {
                     let timeStr = "";
@@ -413,7 +467,7 @@ const CEP = (function() {
             const minSilenceDuration = options.minSilenceDuration || 0.3;
 
             const ffmpegResult = await runFFmpegSilenceDetect(
-                seqInfo.sourcePath,
+                sourcePath,
                 effectiveThreshold,
                 minSilenceDuration,
                 clipOutPoint,

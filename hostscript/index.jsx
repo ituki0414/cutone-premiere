@@ -241,7 +241,7 @@ function getActiveSequence() {
 
 function getSequenceInfo() {
     try {
-        log("========== getSequenceInfo v6.0 ==========");
+        log("========== getSequenceInfo v7.0 ==========");
 
         var sequence = app.project.activeSequence;
         if (!sequence) {
@@ -263,6 +263,27 @@ function getSequenceInfo() {
         log("  Sequence: " + clipInfo.startInSequence.toFixed(2) + " - " + clipInfo.endInSequence.toFixed(2));
         log("  Source: " + clipInfo.inPoint.toFixed(2) + " - " + clipInfo.outPoint.toFixed(2));
 
+        // Get in/out points of sequence
+        var seqInPoint = -1;
+        var seqOutPoint = -1;
+        try {
+            var inPointTime = sequence.getInPoint();
+            var outPointTime = sequence.getOutPoint();
+            if (inPointTime && inPointTime !== "undefined") {
+                seqInPoint = getTimeInSeconds(inPointTime);
+            }
+            if (outPointTime && outPointTime !== "undefined") {
+                seqOutPoint = getTimeInSeconds(outPointTime);
+            }
+            log("Sequence In/Out: " + seqInPoint.toFixed(2) + " / " + seqOutPoint.toFixed(2));
+        } catch (e) {
+            log("Could not get in/out points: " + e.toString());
+        }
+
+        // Get selected clips info
+        var selectedClipsInfo = getSelectedClipsRange(sequence);
+        log("Selected clips: " + (selectedClipsInfo ? selectedClipsInfo.count + " clips" : "none"));
+
         return JSON.stringify({
             success: true,
             name: sequence.name,
@@ -273,12 +294,86 @@ function getSequenceInfo() {
             clipInPoint: clipInfo.inPoint,
             clipOutPoint: clipInfo.outPoint,
             clipDuration: clipInfo.duration,
-            duration: seqDuration
+            duration: seqDuration,
+            // New fields for section type
+            seqInPoint: seqInPoint,
+            seqOutPoint: seqOutPoint,
+            selectedClips: selectedClipsInfo
         });
 
     } catch (e) {
         log("ERROR: " + e.toString());
         return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Get the time range of selected clips
+ */
+function getSelectedClipsRange(sequence) {
+    try {
+        var minStart = Infinity;
+        var maxEnd = -Infinity;
+        var count = 0;
+        var selectedPath = null;
+
+        // Check video tracks for selection
+        for (var v = 0; v < sequence.videoTracks.numTracks; v++) {
+            var track = sequence.videoTracks[v];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                if (clip && clip.isSelected()) {
+                    var startSec = getTimeInSeconds(clip.start);
+                    var endSec = getTimeInSeconds(clip.end);
+                    if (startSec < minStart) minStart = startSec;
+                    if (endSec > maxEnd) maxEnd = endSec;
+                    count++;
+
+                    // Get source path of first selected clip
+                    if (!selectedPath && clip.projectItem) {
+                        try {
+                            selectedPath = clip.projectItem.getMediaPath();
+                        } catch (e) {}
+                    }
+                }
+            }
+        }
+
+        // Check audio tracks for selection
+        for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
+            var track = sequence.audioTracks[a];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                if (clip && clip.isSelected()) {
+                    var startSec = getTimeInSeconds(clip.start);
+                    var endSec = getTimeInSeconds(clip.end);
+                    if (startSec < minStart) minStart = startSec;
+                    if (endSec > maxEnd) maxEnd = endSec;
+                    count++;
+
+                    // Get source path of first selected clip
+                    if (!selectedPath && clip.projectItem) {
+                        try {
+                            selectedPath = clip.projectItem.getMediaPath();
+                        } catch (e) {}
+                    }
+                }
+            }
+        }
+
+        if (count === 0) {
+            return null;
+        }
+
+        return {
+            start: minStart,
+            end: maxEnd,
+            count: count,
+            sourcePath: selectedPath
+        };
+    } catch (e) {
+        log("Error getting selected clips: " + e.toString());
+        return null;
     }
 }
 
