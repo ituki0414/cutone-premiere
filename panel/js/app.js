@@ -355,16 +355,23 @@
     // ============================================
 
     async function refreshTranscriptionSequenceInfo() {
+        console.log("[CutOne] refreshTranscriptionSequenceInfo called");
+
         try {
+            console.log("[CutOne] Calling CEP.getActiveSequence()...");
             const result = await CEP.getActiveSequence();
+            console.log("[CutOne] CEP.getActiveSequence() returned:", JSON.stringify(result));
+
             if (result && result.success) {
                 currentSequence = result;
                 elements.transcriptionSequenceName.textContent = result.name;
                 elements.transcriptionSequenceDuration.textContent = result.durationFormatted;
+                console.log("[CutOne] Transcription screen - Sequence loaded:", result.name);
             } else {
                 currentSequence = null;
                 elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
                 elements.transcriptionSequenceDuration.textContent = "--:--";
+                console.log("[CutOne] Transcription screen - No sequence, result:", result);
             }
         } catch (e) {
             // When callExtendScript rejects (success: false), this is triggered
@@ -372,7 +379,7 @@
             currentSequence = null;
             elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
             elements.transcriptionSequenceDuration.textContent = "--:--";
-            console.error("[CutOne] Error getting sequence:", e);
+            console.error("[CutOne] Transcription screen - Error getting sequence:", e.message || e);
         }
     }
 

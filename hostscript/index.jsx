@@ -315,23 +315,66 @@ function testSingleExtract() {
 // ============================================
 function getActiveSequence() {
     try {
+        log("=== getActiveSequence called ===");
+
         var sequence = app.project.activeSequence;
+        log("activeSequence: " + (sequence ? sequence.name : "null"));
+
+        // If no active sequence, try to find any sequence in the project
         if (!sequence) {
+            log("No active sequence, searching project for sequences...");
+            sequence = findFirstSequenceInProject();
+            if (sequence) {
+                log("Found sequence in project: " + sequence.name);
+                // Try to open it in the timeline
+                try {
+                    sequence.openInTimeline();
+                    log("Opened sequence in timeline");
+                } catch (openErr) {
+                    log("Could not open in timeline: " + openErr);
+                }
+            }
+        }
+
+        if (!sequence) {
+            log("No sequence found anywhere");
             return JSON.stringify({ success: false, error: "No active sequence" });
         }
 
         var durationSeconds = getSequenceDuration(sequence);
+        log("Duration: " + durationSeconds + "s");
 
-        return JSON.stringify({
+        var result = {
             success: true,
             name: sequence.name,
             videoTracks: sequence.videoTracks.numTracks,
             audioTracks: sequence.audioTracks.numTracks,
             duration: durationSeconds,
             durationFormatted: formatTime(durationSeconds)
-        });
+        };
+
+        log("Returning: " + JSON.stringify(result));
+        return JSON.stringify(result);
     } catch (e) {
+        log("getActiveSequence error: " + e.toString());
         return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Find the first sequence in the project using app.project.sequences
+ */
+function findFirstSequenceInProject() {
+    try {
+        if (app.project.sequences && app.project.sequences.numSequences > 0) {
+            log("Found " + app.project.sequences.numSequences + " sequences in project");
+            return app.project.sequences[0];
+        }
+        log("No sequences in project");
+        return null;
+    } catch (e) {
+        log("findFirstSequenceInProject error: " + e);
+        return null;
     }
 }
 
