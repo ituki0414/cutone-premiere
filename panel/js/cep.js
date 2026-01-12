@@ -587,8 +587,27 @@ const CEP = (function() {
             const BATCH_SIZE = 5; // Process 5 segments at a time for progress updates
             const totalSegments = mergedSegments.length;
             const silenceAction = options.silenceAction || "delete";
-            const paddingBefore = options.paddingBefore || 0.2;
-            const paddingAfter = options.paddingAfter || 0.2;
+            const transition = options.transition || "none";
+            let paddingBefore = options.paddingBefore || 0.2;
+            let paddingAfter = options.paddingAfter || 0.2;
+
+            // Adjust padding based on transition type
+            // J-Cut: Audio comes before video (reduce paddingAfter for audio)
+            // L-Cut: Video comes before audio (reduce paddingBefore for audio)
+            const transitionOffset = 0.1; // 100ms offset for transition effect
+            let audioPaddingBefore = paddingBefore;
+            let audioPaddingAfter = paddingAfter;
+
+            if (transition === "jcut" || transition === "both") {
+                audioPaddingAfter = Math.max(0, paddingAfter - transitionOffset);
+                console.log("[CEP] J-Cut: audioPaddingAfter reduced to " + audioPaddingAfter);
+            }
+            if (transition === "lcut" || transition === "both") {
+                audioPaddingBefore = Math.max(0, paddingBefore - transitionOffset);
+                console.log("[CEP] L-Cut: audioPaddingBefore reduced to " + audioPaddingBefore);
+            }
+
+            console.log("[CEP] Transition: " + transition);
 
             let processedCount = 0;
             let totalDeletedCount = 0;
@@ -637,7 +656,10 @@ const CEP = (function() {
                     segments: batch,
                     paddingBefore: paddingBefore,
                     paddingAfter: paddingAfter,
+                    audioPaddingBefore: audioPaddingBefore,
+                    audioPaddingAfter: audioPaddingAfter,
                     silenceAction: silenceAction,
+                    transition: transition,
                     batchIndex: batchIndex,
                     totalBatches: batches.length,
                     isLastBatch: batchIndex === batches.length - 1
