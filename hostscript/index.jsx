@@ -632,9 +632,8 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
 
             log("  -> Deleted: " + deleted.toFixed(3) + "s | Seq now: " + durAfter.toFixed(3) + "s");
 
-            if (deleted > 0.05) {
-                deletedCount++;
-            }
+            // Count as successful if extract was called (regardless of duration change)
+            deletedCount++;
 
         } catch (e) {
             log("  ERROR: " + e.toString());
@@ -648,7 +647,7 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
     log("--- Batch complete ---");
     log("Segments in batch: " + segments.length);
     log("Extract() calls: " + extractCallCount);
-    log("Successful: " + deletedCount + ", Skipped: " + skippedCount);
+    log("Deleted: " + deletedCount + ", Skipped: " + skippedCount);
 
     return deletedCount;
 }
