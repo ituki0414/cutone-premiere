@@ -116,9 +116,104 @@ function getSequenceDuration(sequence) {
 function testExtendScript() {
     return JSON.stringify({
         success: true,
-        message: "ExtendScript v21.0 (J/L-Cut + Constant Power)",
+        message: "ExtendScript v21.1 (Caption Track Debug)",
         os: $.os
     });
+}
+
+/**
+ * Debug function to inspect Caption API availability
+ * Call from CEP: CEP.callExtendScript("debugCaptionAPI")
+ */
+function debugCaptionAPI() {
+    try {
+        var sequence = app.project.activeSequence;
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== debugCaptionAPI ===");
+
+        var result = {
+            success: true,
+            premiereVersion: app.version,
+            sequenceName: sequence.name
+        };
+
+        // Check captionTracks property
+        result.hasCaptionTracks = (sequence.captionTracks !== undefined);
+        log("hasCaptionTracks: " + result.hasCaptionTracks);
+
+        if (sequence.captionTracks) {
+            result.captionTracksType = typeof sequence.captionTracks;
+            log("captionTracks type: " + result.captionTracksType);
+
+            // List all properties of captionTracks
+            var props = [];
+            for (var key in sequence.captionTracks) {
+                props.push(key);
+            }
+            result.captionTracksProps = props;
+            log("captionTracks props: " + props.join(", "));
+
+            // Check numTracks
+            try {
+                result.numTracks = sequence.captionTracks.numTracks;
+                log("numTracks: " + result.numTracks);
+            } catch (e) {
+                result.numTracksError = e.toString();
+                log("numTracks error: " + e.toString());
+            }
+
+            // Check if we can get a track
+            if (result.numTracks > 0) {
+                try {
+                    var track = sequence.captionTracks[0];
+                    result.hasFirstTrack = (track !== undefined);
+                    log("hasFirstTrack: " + result.hasFirstTrack);
+
+                    if (track) {
+                        var trackProps = [];
+                        for (var tkey in track) {
+                            trackProps.push(tkey);
+                        }
+                        result.trackProps = trackProps;
+                        log("track props: " + trackProps.join(", "));
+
+                        // Check for addCaption method
+                        result.hasAddCaption = (typeof track.addCaption === "function");
+                        result.hasInsertCaption = (typeof track.insertCaption === "function");
+                        log("hasAddCaption: " + result.hasAddCaption);
+                        log("hasInsertCaption: " + result.hasInsertCaption);
+                    }
+                } catch (e) {
+                    result.getTrackError = e.toString();
+                    log("getTrack error: " + e.toString());
+                }
+            }
+        }
+
+        // Check createCaptionTrack method
+        result.hasCreateCaptionTrack = (typeof sequence.createCaptionTrack === "function");
+        log("hasCreateCaptionTrack: " + result.hasCreateCaptionTrack);
+
+        // Check for alternative APIs
+        result.hasProjectItem = (sequence.projectItem !== undefined);
+
+        // Check app.project methods for captions
+        var projectMethods = [];
+        for (var pk in app.project) {
+            if (pk.toLowerCase().indexOf("caption") >= 0) {
+                projectMethods.push(pk);
+            }
+        }
+        result.projectCaptionMethods = projectMethods;
+
+        return JSON.stringify(result);
+    } catch (e) {
+        log("debugCaptionAPI error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
 }
 
 /**

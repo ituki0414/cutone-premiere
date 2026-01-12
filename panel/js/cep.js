@@ -1277,6 +1277,17 @@ const CEP = (function() {
         return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")},${ms.toString().padStart(3, "0")}`;
     }
 
+    /**
+     * Debug Caption API availability
+     * Call from console: CEP.debugCaptionAPI()
+     */
+    async function debugCaptionAPI() {
+        console.log("[CEP] Debugging Caption API...");
+        const result = await callExtendScript("debugCaptionAPI", []);
+        console.log("[CEP] Caption API Debug Result:", JSON.stringify(result, null, 2));
+        return result;
+    }
+
     return {
         init,
         getActiveSequence,
@@ -1292,6 +1303,7 @@ const CEP = (function() {
         testExtendScript,
         transcribeAudio,
         addCaptionsToSequence,
-        exportSRT
+        exportSRT,
+        debugCaptionAPI
     };
 })();
