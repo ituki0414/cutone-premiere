@@ -50,7 +50,7 @@
 
 ## 現在のバージョン
 
-- **ExtendScript (index.jsx)**: v21.2
+- **ExtendScript (index.jsx)**: v21.3
   - True J-Cut/L-Cut: ビデオとオーディオを別々のタイミングでカット
   - Constant Power: 自動でオーディオトランジション追加
   - 文字起こし: Caption Track API対応（マーカーではなく字幕トラック）
@@ -98,4 +98,5 @@ git checkout <commit-hash> -- hostscript/index.jsx  # 特定ファイルを復�
 | v21.0 | J/L-Cut未実装 | True J-Cut/L-Cut + Constant Power実装 |
 | v21.1 | 字幕がマーカーになる | Caption Track API対応（字幕トラックに追加） |
 | v21.2 | Caption APIデバッグ | デバッグ情報追加、ticks形式対応、マーカー位置修正 |
+| v21.3 | マーカー不要 | マーカーフォールバック削除、SRT自動インポート |
 | v7.0 (CEP) | 文字起こし機能なし | Whisper API連携 + SRTエクスポート |
