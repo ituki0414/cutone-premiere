@@ -1,8 +1,9 @@
 /**
  * CutOne - CEP Communication Layer
- * Version 5.0 - DaVinci Resolve-style implementation
+ * Version 5.1 - minTalkDuration support
  *
  * Key improvement: Analyze audio levels first, then set relative threshold
+ * v5.1: Added minTalkDuration - merges silence segments with short speech gaps
  */
 
 const childProcess = require("child_process");
@@ -481,9 +482,47 @@ const CEP = (function() {
                 };
             }
 
+            // Step 5.5: Merge segments with short speech gaps (minTalkDuration)
+            const minTalkDuration = options.minTalkDuration || 0;
+            let mergedSegments = adjustedSegments;
+
+            if (minTalkDuration > 0) {
+                console.log("[CEP] Applying minTalkDuration filter: " + minTalkDuration + "s");
+
+                // Sort by start time ascending for merging
+                mergedSegments = [...adjustedSegments].sort((a, b) => a.start - b.start);
+
+                // Merge segments where the gap (speech) between them is shorter than minTalkDuration
+                const merged = [];
+                let current = mergedSegments[0];
+
+                for (let i = 1; i < mergedSegments.length; i++) {
+                    const next = mergedSegments[i];
+                    const gap = next.start - current.end; // Gap is the speech duration
+
+                    if (gap < minTalkDuration) {
+                        // Merge: extend current segment to include next
+                        console.log("[CEP]   Merging: gap=" + gap.toFixed(2) + "s < minTalk=" + minTalkDuration + "s");
+                        current = {
+                            start: current.start,
+                            end: next.end,
+                            duration: next.end - current.start
+                        };
+                    } else {
+                        // Keep current segment and move to next
+                        merged.push(current);
+                        current = next;
+                    }
+                }
+                merged.push(current); // Don't forget the last segment
+
+                console.log("[CEP] After minTalkDuration merge: " + merged.length + " segments (was " + mergedSegments.length + ")");
+                mergedSegments = merged;
+            }
+
             // Log what we're about to cut
             let totalSilence = 0;
-            for (const seg of adjustedSegments) {
+            for (const seg of mergedSegments) {
                 totalSilence += seg.duration;
             }
             console.log("[CEP] Total silence to cut: " + totalSilence.toFixed(2) + "s");
@@ -491,7 +530,7 @@ const CEP = (function() {
 
             // Step 6: Process segments in batches with progress updates
             const BATCH_SIZE = 5; // Process 5 segments at a time for progress updates
-            const totalSegments = adjustedSegments.length;
+            const totalSegments = mergedSegments.length;
             const silenceAction = options.silenceAction || "delete";
             const paddingBefore = options.paddingBefore || 0.2;
             const paddingAfter = options.paddingAfter || 0.2;
@@ -503,7 +542,7 @@ const CEP = (function() {
 
             // Sort segments by start time descending (process from end to start)
             // This is critical to avoid position shifts when deleting
-            const sortedSegments = [...adjustedSegments].sort((a, b) => b.start - a.start);
+            const sortedSegments = [...mergedSegments].sort((a, b) => b.start - a.start);
 
             // Process in batches for progress updates
             const batches = [];
