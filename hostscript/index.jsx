@@ -501,7 +501,7 @@ var _deleteCallCount = 0;
 
 /**
  * Delete segments using setInPoint/setOutPoint + extract
- * v16.0 - Debug version to find why extra cuts happen
+ * v16.1 - Frame-aligned cuts to prevent video/audio desync
  */
 function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingAfter) {
     _deleteCallCount++;
@@ -510,7 +510,7 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
     log("########################################");
     log("### FUNCTION CALL #" + callId + " ###");
     log("########################################");
-    log("=== deleteSegmentsUsingTimeCode v16.0 ===");
+    log("=== deleteSegmentsUsingTimeCode v16.1 (frame-aligned) ===");
     log("Input segments count: " + segments.length);
     log("Padding: before=" + paddingBefore + ", after=" + paddingAfter);
 
@@ -585,14 +585,33 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
             cutDuration = cutEnd - cutStart;
         }
 
-        log("CUT " + (extractCallCount+1) + " | Seg " + (i+1) + "/" + segments.length + ": " + cutStart.toFixed(3) + "s - " + cutEnd.toFixed(3) + "s (" + cutDuration.toFixed(3) + "s)");
+        // Align to frame boundary to prevent video/audio desync
+        var frameRate = 30; // Default, will try to get from sequence
+        try {
+            var timebase = sequence.timebase;
+            if (timebase) {
+                frameRate = Math.round(TICKS_PER_SECOND / parseFloat(timebase));
+            }
+        } catch (e) {
+            log("  Using default 30fps");
+        }
+
+        var ticksPerFrame = TICKS_PER_SECOND / frameRate;
+        var startTicks = Math.round(cutStart * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+        var endTicks = Math.round(cutEnd * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+
+        // Convert back to seconds (frame-aligned)
+        var alignedStart = startTicks / TICKS_PER_SECOND;
+        var alignedEnd = endTicks / TICKS_PER_SECOND;
+
+        log("CUT " + (extractCallCount+1) + " | Seg " + (i+1) + "/" + segments.length + ": " + alignedStart.toFixed(3) + "s - " + alignedEnd.toFixed(3) + "s (frame-aligned from " + cutStart.toFixed(3) + "s - " + cutEnd.toFixed(3) + "s)");
 
         var durBefore = seqDur;
 
         try {
-            // Set in/out points using standard API (seconds)
-            sequence.setInPoint(cutStart);
-            sequence.setOutPoint(cutEnd);
+            // Set in/out points using frame-aligned seconds
+            sequence.setInPoint(alignedStart);
+            sequence.setOutPoint(alignedEnd);
 
             // Extract using QE API (ripple delete)
             qeSeq.extract();
