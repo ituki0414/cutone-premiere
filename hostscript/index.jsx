@@ -1862,8 +1862,8 @@ function getFirstClipPath() {
 }
 
 /**
- * Add captions to sequence
- * Creates markers with text or adds to caption track
+ * Add captions to sequence as actual caption track
+ * Uses Premiere Pro's Caption API to create proper subtitles
  * @param {string} segmentsJson - JSON array of {start, end, text} segments
  */
 function addCaptionsToSequence(segmentsJson) {
@@ -1875,47 +1875,217 @@ function addCaptionsToSequence(segmentsJson) {
             return JSON.stringify({ success: false, error: "No active sequence" });
         }
 
-        log("=== addCaptionsToSequence ===");
+        log("=== addCaptionsToSequence v2.0 (Caption Track) ===");
         log("Adding " + segments.length + " caption segments");
 
-        var markers = sequence.markers;
         var addedCount = 0;
 
-        // Add each segment as a marker with the transcription text
-        for (var i = 0; i < segments.length; i++) {
-            var seg = segments[i];
+        // Try to use Caption API (Premiere Pro 2021+)
+        try {
+            // Check if captionTracks exists
+            if (sequence.captionTracks && sequence.captionTracks.numTracks !== undefined) {
+                log("Caption API available, tracks: " + sequence.captionTracks.numTracks);
 
-            try {
-                // Create marker at segment start time
-                var marker = markers.createMarker(seg.start);
+                var captionTrack;
 
-                if (marker) {
-                    marker.name = "Caption " + (i + 1);
-                    marker.comments = seg.text;
-                    marker.end = seg.end;
-
-                    // Set marker color to yellow for captions
-                    marker.setColorByIndex(3); // Yellow
-
-                    addedCount++;
-                    log("Added caption " + (i + 1) + ": " + seg.text.substring(0, 30) + "...");
+                // Get or create caption track
+                if (sequence.captionTracks.numTracks > 0) {
+                    captionTrack = sequence.captionTracks[0];
+                    log("Using existing caption track");
+                } else {
+                    // Try to create a new caption track
+                    // Note: createCaptionTrack might not be available in all versions
+                    if (sequence.createCaptionTrack) {
+                        captionTrack = sequence.createCaptionTrack();
+                        log("Created new caption track");
+                    }
                 }
-            } catch (markerErr) {
-                log("Could not add marker " + (i + 1) + ": " + markerErr);
+
+                if (captionTrack) {
+                    // Add captions to the track
+                    for (var i = 0; i < segments.length; i++) {
+                        var seg = segments[i];
+                        try {
+                            // Create caption item
+                            // Different methods depending on Premiere version
+                            if (captionTrack.addCaption) {
+                                captionTrack.addCaption(seg.start, seg.end - seg.start, seg.text);
+                                addedCount++;
+                                log("Added caption " + (i + 1) + ": " + seg.text.substring(0, 30));
+                            } else if (captionTrack.insertCaption) {
+                                captionTrack.insertCaption(seg.start, seg.end, seg.text);
+                                addedCount++;
+                                log("Inserted caption " + (i + 1));
+                            }
+                        } catch (capErr) {
+                            log("Caption API error for segment " + (i + 1) + ": " + capErr);
+                        }
+                    }
+                }
+
+                if (addedCount > 0) {
+                    return JSON.stringify({
+                        success: true,
+                        count: addedCount,
+                        total: segments.length,
+                        method: "captionTrack"
+                    });
+                }
             }
+        } catch (captionErr) {
+            log("Caption API not available or error: " + captionErr);
         }
 
-        log("Successfully added " + addedCount + " captions");
+        // Fallback: Create Graphics Text clips as subtitles on V2 track
+        log("Using Graphics Text fallback method");
+
+        try {
+            addedCount = createTextGraphicsForCaptions(sequence, segments);
+
+            if (addedCount > 0) {
+                return JSON.stringify({
+                    success: true,
+                    count: addedCount,
+                    total: segments.length,
+                    method: "graphicsText"
+                });
+            }
+        } catch (gfxErr) {
+            log("Graphics text error: " + gfxErr);
+        }
+
+        // Final fallback: Use markers (original method)
+        log("Falling back to markers method");
+
+        var markers = sequence.markers;
+        addedCount = 0;
+
+        for (var i = 0; i < segments.length; i++) {
+            var seg = segments[i];
+            try {
+                var marker = markers.createMarker(seg.start);
+                if (marker) {
+                    marker.name = seg.text.substring(0, 50);
+                    marker.comments = seg.text;
+                    marker.end = seg.end;
+                    marker.setColorByIndex(3); // Yellow
+                    addedCount++;
+                }
+            } catch (markerErr) {
+                log("Marker error: " + markerErr);
+            }
+        }
 
         return JSON.stringify({
             success: true,
             count: addedCount,
-            total: segments.length
+            total: segments.length,
+            method: "markers",
+            note: "Caption API not available. Markers created instead. Import the SRT file manually for proper subtitles."
         });
     } catch (e) {
         log("addCaptionsToSequence error: " + e.toString());
         return JSON.stringify({ success: false, error: e.toString() });
     }
+}
+
+/**
+ * Create text graphics clips for captions (fallback method)
+ * Creates essential graphics text clips on a video track
+ */
+function createTextGraphicsForCaptions(sequence, segments) {
+    log("=== createTextGraphicsForCaptions ===");
+
+    // Get or create a video track for captions
+    var targetTrackIndex = 1; // V2 track (0-indexed)
+
+    // Ensure we have enough video tracks
+    while (sequence.videoTracks.numTracks <= targetTrackIndex) {
+        try {
+            // Can't easily add tracks via API, use existing
+            targetTrackIndex = sequence.videoTracks.numTracks - 1;
+            break;
+        } catch (e) {
+            break;
+        }
+    }
+
+    if (targetTrackIndex < 0) targetTrackIndex = 0;
+
+    var targetTrack = sequence.videoTracks[targetTrackIndex];
+    log("Using video track: V" + (targetTrackIndex + 1));
+
+    var addedCount = 0;
+    var ticksPerSecond = TICKS_PER_SECOND;
+
+    // Try to find a text/title mogrt or template in the project
+    var mogrtTemplate = findMogrtTemplate();
+
+    for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+
+        try {
+            // Calculate position in ticks
+            var startTicks = Math.round(seg.start * ticksPerSecond);
+            var endTicks = Math.round(seg.end * ticksPerSecond);
+            var durationTicks = endTicks - startTicks;
+
+            // Method 1: Try to insert from mogrt template
+            if (mogrtTemplate) {
+                var clip = targetTrack.insertClip(mogrtTemplate, startTicks / ticksPerSecond);
+                if (clip) {
+                    // Try to modify text
+                    if (clip.components) {
+                        for (var c = 0; c < clip.components.numItems; c++) {
+                            var comp = clip.components[c];
+                            if (comp.properties) {
+                                for (var p = 0; p < comp.properties.numItems; p++) {
+                                    var prop = comp.properties[p];
+                                    if (prop.displayName && prop.displayName.toLowerCase().indexOf("text") >= 0) {
+                                        prop.setValue(seg.text);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Set duration
+                    clip.end = endTicks / ticksPerSecond;
+                    addedCount++;
+                    log("Added text clip " + (i + 1));
+                }
+            }
+        } catch (clipErr) {
+            log("Could not create text clip " + (i + 1) + ": " + clipErr);
+        }
+    }
+
+    return addedCount;
+}
+
+/**
+ * Find a motion graphics template for text
+ */
+function findMogrtTemplate() {
+    try {
+        var rootItem = app.project.rootItem;
+
+        // Search for text mogrt in project
+        for (var i = 0; i < rootItem.children.numItems; i++) {
+            var item = rootItem.children[i];
+            if (item && item.type === ProjectItemType.FILE) {
+                var name = item.name.toLowerCase();
+                if (name.indexOf("text") >= 0 || name.indexOf("title") >= 0 || name.indexOf("caption") >= 0) {
+                    log("Found template: " + item.name);
+                    return item;
+                }
+            }
+        }
+    } catch (e) {
+        log("Could not find mogrt template: " + e);
+    }
+
+    return null;
 }
 
 /**
