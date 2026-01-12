@@ -1,9 +1,10 @@
 /**
  * CutOne - Premiere Pro Extension
  * ExtendScript for Premiere Pro API interaction
- * Version 6.0 - DaVinci Resolve style implementation
+ * Version 21.0 - True J-Cut/L-Cut and Constant Power transitions
  *
  * Key change: Use Time objects instead of raw ticks to avoid precision issues
+ * v21.0: Proper J-Cut/L-Cut (separate video/audio timing) and Constant Power transitions
  */
 
 // ============================================
@@ -115,7 +116,7 @@ function getSequenceDuration(sequence) {
 function testExtendScript() {
     return JSON.stringify({
         success: true,
-        message: "ExtendScript v7.0 (Debug)",
+        message: "ExtendScript v21.0 (J/L-Cut + Constant Power)",
         os: $.os
     });
 }
@@ -491,6 +492,8 @@ function processSegments(optionsJson) {
         var segments = options.segments || [];
         var paddingBefore = options.paddingBefore || 0.2;
         var paddingAfter = options.paddingAfter || 0.2;
+        var videoPaddingBefore = options.videoPaddingBefore || paddingBefore;
+        var videoPaddingAfter = options.videoPaddingAfter || paddingAfter;
         var audioPaddingBefore = options.audioPaddingBefore || paddingBefore;
         var audioPaddingAfter = options.audioPaddingAfter || paddingAfter;
         var silenceAction = options.silenceAction || "delete";
@@ -501,7 +504,7 @@ function processSegments(optionsJson) {
         var isLastBatch = options.isLastBatch || (totalBatches === 1);
         var isBatchMode = totalBatches > 1;
 
-        log("========== processSegments v20.2 (audio track selection) ==========");
+        log("========== processSegments v21.0 (J/L-Cut + Constant Power) ==========");
         log("### CALL #" + callId + " | Batch " + (batchIndex + 1) + "/" + totalBatches + " ###");
 
         // Only apply duplicate protection for first batch or non-batch mode
@@ -570,7 +573,7 @@ function processSegments(optionsJson) {
         // Log transition info
         if (transition !== "none") {
             log("Transition: " + transition);
-            log("Video padding: " + paddingBefore + " / " + paddingAfter);
+            log("Video padding: " + videoPaddingBefore + " / " + videoPaddingAfter);
             log("Audio padding: " + audioPaddingBefore + " / " + audioPaddingAfter);
         }
 
@@ -578,15 +581,17 @@ function processSegments(optionsJson) {
         log("Selected tracks: " + selectedTracks.join(", "));
 
         if (silenceAction === "delete") {
-            if (transition !== "none" && transition !== "constantPower") {
-                // For J-Cut/L-Cut, use different padding for audio
-                processedCount = deleteSegmentsWithTransition(sequence, segments, paddingBefore, paddingAfter, audioPaddingBefore, audioPaddingAfter, transition);
+            if (transition === "jcut" || transition === "lcut" || transition === "both") {
+                // For J-Cut/L-Cut, use different padding for video and audio
+                processedCount = deleteSegmentsWithTransition(sequence, segments, videoPaddingBefore, videoPaddingAfter, audioPaddingBefore, audioPaddingAfter, transition);
+            } else if (transition === "constantPower") {
+                // For Constant Power, cut normally first then add transitions
+                processedCount = deleteSegmentsUsingTimeCode(sequence, segments, videoPaddingBefore, videoPaddingAfter);
+                // Add constant power transition after cutting
+                addConstantPowerTransitions(sequence);
             } else {
-                processedCount = deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingAfter);
-                if (transition === "constantPower") {
-                    // Add constant power transition after cutting
-                    addConstantPowerTransitions(sequence);
-                }
+                // No transition - use standard cut
+                processedCount = deleteSegmentsUsingTimeCode(sequence, segments, videoPaddingBefore, videoPaddingAfter);
             }
         } else if (silenceAction === "keep") {
             addMarkersForSegments(sequence, segments);
@@ -776,42 +781,321 @@ function deleteSegmentsUsingTimeCode(sequence, segments, paddingBefore, paddingA
 
 /**
  * Delete segments with J-Cut/L-Cut transition effect
- * v20.1 - Uses different padding for video and audio tracks
+ * v21.0 - True J-Cut/L-Cut implementation
+ *
+ * J-Cut: Audio comes before video (audio of next clip starts earlier)
+ *   - In silence cutting: Cut audio earlier, leaving video longer
+ *   - Result: Video extends into silence while audio has already cut
+ *
+ * L-Cut: Video comes before audio (video of next clip starts earlier)
+ *   - In silence cutting: Cut video earlier, leaving audio longer
+ *   - Result: Audio extends into silence while video has already cut
+ *
+ * Implementation: Process tracks separately using lift + selective trim
  */
 function deleteSegmentsWithTransition(sequence, segments, videoPaddingBefore, videoPaddingAfter, audioPaddingBefore, audioPaddingAfter, transition) {
-    log("=== deleteSegmentsWithTransition v20.1 ===");
+    log("=== deleteSegmentsWithTransition v21.0 (True J/L-Cut) ===");
     log("Transition type: " + transition);
     log("Video padding: " + videoPaddingBefore + " / " + videoPaddingAfter);
     log("Audio padding: " + audioPaddingBefore + " / " + audioPaddingAfter);
 
-    // For simplicity, use the audio padding for the overall cut
-    // This creates a natural J-Cut or L-Cut effect
-    // In a more complex implementation, we would cut video and audio separately
-    var effectivePaddingBefore = audioPaddingBefore;
-    var effectivePaddingAfter = audioPaddingAfter;
+    // Sort segments descending (process from end first)
+    segments.sort(function(a, b) { return b.start - a.start; });
 
-    log("Using effective padding: " + effectivePaddingBefore + " / " + effectivePaddingAfter);
+    app.enableQE();
+    var qeSeq = qe.project.getActiveSequence();
+    if (!qeSeq) {
+        log("ERROR: No QE sequence");
+        return 0;
+    }
 
-    return deleteSegmentsUsingTimeCode(sequence, segments, effectivePaddingBefore, effectivePaddingAfter);
+    var deletedCount = 0;
+    var ticksPerFrame = TICKS_PER_SECOND / 30;
+    try {
+        var timebase = sequence.timebase;
+        if (timebase) {
+            ticksPerFrame = parseFloat(timebase);
+        }
+    } catch (e) {}
+
+    for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+
+        // Calculate video and audio cut points separately
+        var videoCutStart = seg.start + videoPaddingBefore;
+        var videoCutEnd = seg.end - videoPaddingAfter;
+        var audioCutStart = seg.start + audioPaddingBefore;
+        var audioCutEnd = seg.end - audioPaddingAfter;
+
+        // Validate
+        if (videoCutEnd <= videoCutStart && audioCutEnd <= audioCutStart) {
+            log("Skip segment " + (i+1) + ": too short after padding");
+            continue;
+        }
+
+        // Get current sequence duration
+        var seqDur = getSequenceDuration(sequence);
+
+        // Skip if beyond sequence
+        if (videoCutStart >= seqDur && audioCutStart >= seqDur) {
+            log("Skip segment " + (i+1) + ": beyond sequence");
+            continue;
+        }
+
+        // Clamp to sequence
+        if (videoCutEnd > seqDur) videoCutEnd = seqDur - 0.001;
+        if (audioCutEnd > seqDur) audioCutEnd = seqDur - 0.001;
+
+        log("Segment " + (i+1) + "/" + segments.length + ":");
+        log("  Video cut: " + videoCutStart.toFixed(3) + "s - " + videoCutEnd.toFixed(3) + "s");
+        log("  Audio cut: " + audioCutStart.toFixed(3) + "s - " + audioCutEnd.toFixed(3) + "s");
+
+        // If video and audio cuts are the same, use normal extract
+        if (Math.abs(videoCutStart - audioCutStart) < 0.01 && Math.abs(videoCutEnd - audioCutEnd) < 0.01) {
+            log("  Same timing - using normal extract");
+            var effectiveStart = videoCutStart;
+            var effectiveEnd = videoCutEnd;
+
+            if (effectiveEnd > effectiveStart + 0.1) {
+                // Align to frame
+                var startTicks = Math.round(effectiveStart * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+                var endTicks = Math.round(effectiveEnd * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+                var alignedStart = startTicks / TICKS_PER_SECOND;
+                var alignedEnd = endTicks / TICKS_PER_SECOND;
+
+                try {
+                    sequence.setInPoint(alignedStart);
+                    sequence.setOutPoint(alignedEnd);
+                    qeSeq.extract();
+                    qeSeq.setInPoint("");
+                    qeSeq.setOutPoint("");
+                    deletedCount++;
+                } catch (e) {
+                    log("  Error: " + e.toString());
+                }
+            }
+        } else {
+            // Different timing - use track-specific processing
+            log("  Different timing - processing tracks separately");
+
+            // Use the longer cut range for the main extract
+            var mainCutStart = Math.min(videoCutStart, audioCutStart);
+            var mainCutEnd = Math.max(videoCutEnd, audioCutEnd);
+
+            if (mainCutEnd > mainCutStart + 0.1) {
+                // Calculate offset times for adjusting after main cut
+                var videoOffset = videoCutStart - mainCutStart;  // How much to extend video at start
+                var audioOffset = audioCutStart - mainCutStart;  // How much to extend audio at start
+
+                // Align to frame
+                var startTicks = Math.round(mainCutStart * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+                var endTicks = Math.round(mainCutEnd * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+                var alignedStart = startTicks / TICKS_PER_SECOND;
+                var alignedEnd = endTicks / TICKS_PER_SECOND;
+
+                try {
+                    // Main cut (affects all tracks)
+                    sequence.setInPoint(alignedStart);
+                    sequence.setOutPoint(alignedEnd);
+                    qeSeq.extract();
+                    qeSeq.setInPoint("");
+                    qeSeq.setOutPoint("");
+
+                    // After extract, clips have been removed and timeline shifted
+                    // The cut point is now at alignedStart
+                    // We can adjust clip edges to create J/L cut effect
+                    var cutPointTicks = Math.round(alignedStart * TICKS_PER_SECOND);
+
+                    // Adjust video clips (extend/shrink start of next clip)
+                    if (Math.abs(videoOffset) > 0.01) {
+                        adjustClipsAtCutPoint(sequence.videoTracks, cutPointTicks, videoOffset, ticksPerFrame);
+                    }
+
+                    // Adjust audio clips (extend/shrink start of next clip)
+                    if (Math.abs(audioOffset) > 0.01) {
+                        adjustClipsAtCutPoint(sequence.audioTracks, cutPointTicks, audioOffset, ticksPerFrame);
+                    }
+
+                    deletedCount++;
+                } catch (e) {
+                    log("  Error: " + e.toString());
+                    try {
+                        qeSeq.setInPoint("");
+                        qeSeq.setOutPoint("");
+                    } catch (e2) {}
+                }
+            }
+        }
+    }
+
+    log("Processed " + deletedCount + " segments with transition");
+    return deletedCount;
+}
+
+/**
+ * Adjust clip edges at cut point to create J/L cut effect
+ * offset > 0: Extend clip at this point (revealing more content)
+ * offset < 0: Shrink clip at this point (hiding content)
+ */
+function adjustClipsAtCutPoint(tracks, cutPointTicks, offsetSeconds, ticksPerFrame) {
+    var offsetTicks = Math.round(offsetSeconds * TICKS_PER_SECOND / ticksPerFrame) * ticksPerFrame;
+    var tolerance = ticksPerFrame * 2; // 2 frame tolerance
+
+    for (var t = 0; t < tracks.numTracks; t++) {
+        var track = tracks[t];
+        for (var c = 0; c < track.clips.numItems; c++) {
+            var clip = track.clips[c];
+            if (!clip) continue;
+
+            var clipStart = getTicksNum(clip.start);
+
+            // Find clip that starts at or near the cut point
+            if (Math.abs(clipStart - cutPointTicks) < tolerance) {
+                try {
+                    // Extend or shrink the clip's in point
+                    var currentInPoint = getTimeInSeconds(clip.inPoint);
+                    var newInPoint = currentInPoint - offsetSeconds; // Negative offset extends
+
+                    if (newInPoint >= 0) {
+                        // Use Time object for precision
+                        var newInPointTicks = Math.round(newInPoint * TICKS_PER_SECOND);
+                        clip.inPoint = { seconds: newInPoint };
+
+                        log("  Adjusted clip in point by " + offsetSeconds.toFixed(3) + "s on track " + t);
+                    }
+                } catch (e) {
+                    log("  Could not adjust clip: " + e.toString());
+                }
+            }
+        }
+    }
 }
 
 /**
  * Add constant power audio transitions at cut points
- * Note: This is a placeholder - full implementation requires QE API
+ * v21.0 - Actually adds transitions using QE API
+ *
+ * Uses qe.project.getActiveSequence() methods to add audio transitions
  */
 function addConstantPowerTransitions(sequence) {
-    log("=== addConstantPowerTransitions ===");
-    log("Note: Constant Power transitions need to be added manually");
-    log("Tip: Select all clips and use 'Sequence > Apply Default Transitions'");
+    log("=== addConstantPowerTransitions v21.0 ===");
 
-    // Adding transitions programmatically is complex in Premiere Pro
-    // The QE API method qe.project.getActiveSequence().addAudioTransition() exists
-    // but requires specific track and clip indices
+    app.enableQE();
+    var qeSeq = qe.project.getActiveSequence();
+    if (!qeSeq) {
+        log("ERROR: No QE sequence");
+        return false;
+    }
 
-    // For now, we add markers to indicate where transitions should be added
-    // Users can then manually add transitions or use batch tools
+    var transitionsAdded = 0;
+    var transitionDuration = 0.1; // 100ms transition duration (frames)
+    var ticksPerFrame = TICKS_PER_SECOND / 30;
+    try {
+        var timebase = sequence.timebase;
+        if (timebase) {
+            ticksPerFrame = parseFloat(timebase);
+        }
+    } catch (e) {}
 
-    return true;
+    // Calculate transition duration in frames (typically 4-6 frames)
+    var framesPerSecond = TICKS_PER_SECOND / ticksPerFrame;
+    var transitionFrames = Math.round(transitionDuration * framesPerSecond);
+    if (transitionFrames < 2) transitionFrames = 2;
+    if (transitionFrames > 10) transitionFrames = 10;
+
+    log("Transition duration: " + transitionFrames + " frames");
+
+    // Find edit points in audio tracks
+    var editPoints = findAudioEditPoints(sequence);
+    log("Found " + editPoints.length + " audio edit points");
+
+    // Add transitions at each edit point
+    for (var i = 0; i < editPoints.length; i++) {
+        var editPoint = editPoints[i];
+        try {
+            // Get the QE audio track
+            var qeAudioTrack = qeSeq.getAudioTrackAt(editPoint.trackIndex);
+            if (qeAudioTrack) {
+                // Try to add audio transition at the clip index
+                // The addTransition method uses clip index, not time
+                var clipIndex = editPoint.clipIndex;
+
+                // Use addTransition to add Constant Power (default audio transition)
+                // Parameters: transitionName, clipIndex, alignment, duration
+                // Alignment: 0 = center, 1 = start, 2 = end
+                try {
+                    qeAudioTrack.addTransition(clipIndex, "Constant Power");
+                    transitionsAdded++;
+                    log("  Added transition on track " + editPoint.trackIndex + " at clip " + clipIndex);
+                } catch (transErr) {
+                    // Try alternative method
+                    log("  Could not add transition at clip " + clipIndex + ": " + transErr);
+                }
+            }
+        } catch (e) {
+            log("  Error adding transition: " + e.toString());
+        }
+    }
+
+    log("Added " + transitionsAdded + " Constant Power transitions");
+
+    // If automated transitions failed, provide guidance
+    if (transitionsAdded === 0 && editPoints.length > 0) {
+        log("Note: Automated transitions may not have been applied.");
+        log("To add transitions manually:");
+        log("  1. Select all clips (Cmd/Ctrl + A)");
+        log("  2. Go to Sequence > Apply Default Transitions");
+        log("  3. Or right-click between clips and add 'Constant Power'");
+    }
+
+    return transitionsAdded > 0;
+}
+
+/**
+ * Find edit points (cut points) in audio tracks
+ * Returns array of {trackIndex, clipIndex, time} for each edit point
+ */
+function findAudioEditPoints(sequence) {
+    var editPoints = [];
+    var tolerance = TICKS_PER_SECOND * 0.05; // 50ms tolerance
+
+    for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
+        var track = sequence.audioTracks[a];
+        var clips = [];
+
+        // Collect clip info
+        for (var c = 0; c < track.clips.numItems; c++) {
+            var clip = track.clips[c];
+            if (clip) {
+                clips.push({
+                    index: c,
+                    start: getTicksNum(clip.start),
+                    end: getTicksNum(clip.end)
+                });
+            }
+        }
+
+        // Sort by start time
+        clips.sort(function(a, b) { return a.start - b.start; });
+
+        // Find adjacent clips (edit points)
+        for (var i = 0; i < clips.length - 1; i++) {
+            var currentClip = clips[i];
+            var nextClip = clips[i + 1];
+
+            // Check if clips are adjacent (gap < tolerance)
+            var gap = nextClip.start - currentClip.end;
+            if (Math.abs(gap) < tolerance) {
+                editPoints.push({
+                    trackIndex: a,
+                    clipIndex: currentClip.index,
+                    time: currentClip.end / TICKS_PER_SECOND
+                });
+            }
+        }
+    }
+
+    return editPoints;
 }
 
 /**

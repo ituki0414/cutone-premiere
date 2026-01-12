@@ -1,12 +1,13 @@
 /**
  * CutOne - CEP Communication Layer
- * Version 5.4 - Audio track selection support
+ * Version 6.0 - True J-Cut/L-Cut and Constant Power transitions
  *
  * Key improvement: Analyze audio levels first, then set relative threshold
  * v5.1: Added minTalkDuration - merges silence segments with short speech gaps
  * v5.2: Added sectionType - process all/in-out/selected clips
  * v5.3: Added previewWithOptions - real silence detection and waveform preview
  * v5.4: Added selectedTracks - process only selected audio tracks
+ * v6.0: True J-Cut/L-Cut with separate video/audio timing + Constant Power transitions
  */
 
 const childProcess = require("child_process");
@@ -593,22 +594,38 @@ const CEP = (function() {
             let paddingAfter = options.paddingAfter || 0.2;
 
             // Adjust padding based on transition type
-            // J-Cut: Audio comes before video (reduce paddingAfter for audio)
-            // L-Cut: Video comes before audio (reduce paddingBefore for audio)
-            const transitionOffset = 0.1; // 100ms offset for transition effect
+            // J-Cut: Audio of next clip starts BEFORE video (audio leads)
+            //   - At cut point: audio cut happens earlier, revealing more of next audio
+            //   - Result: Audio from next speech starts while video still shows end of previous
+            // L-Cut: Video of next clip starts BEFORE audio (video leads)
+            //   - At cut point: video cut happens earlier, revealing more of next video
+            //   - Result: Video from next speech shows while audio still plays previous
+            const transitionOffset = 0.15; // 150ms offset for noticeable J/L-Cut effect
+            let videoPaddingBefore = paddingBefore;
+            let videoPaddingAfter = paddingAfter;
             let audioPaddingBefore = paddingBefore;
             let audioPaddingAfter = paddingAfter;
 
             if (transition === "jcut" || transition === "both") {
-                audioPaddingAfter = Math.max(0, paddingAfter - transitionOffset);
-                console.log("[CEP] J-Cut: audioPaddingAfter reduced to " + audioPaddingAfter);
+                // J-Cut: Audio leads - cut audio earlier at end of silence
+                // Smaller paddingAfter for audio = cut later = more audio from next clip
+                audioPaddingAfter = Math.max(0.05, paddingAfter - transitionOffset);
+                console.log("[CEP] J-Cut: Audio leads video by " + transitionOffset + "s");
+                console.log("[CEP]   videoPaddingAfter: " + videoPaddingAfter);
+                console.log("[CEP]   audioPaddingAfter: " + audioPaddingAfter);
             }
             if (transition === "lcut" || transition === "both") {
-                audioPaddingBefore = Math.max(0, paddingBefore - transitionOffset);
-                console.log("[CEP] L-Cut: audioPaddingBefore reduced to " + audioPaddingBefore);
+                // L-Cut: Video leads - cut video earlier at end of silence
+                // Smaller paddingAfter for video = cut later = more video from next clip
+                videoPaddingAfter = Math.max(0.05, paddingAfter - transitionOffset);
+                console.log("[CEP] L-Cut: Video leads audio by " + transitionOffset + "s");
+                console.log("[CEP]   videoPaddingAfter: " + videoPaddingAfter);
+                console.log("[CEP]   audioPaddingAfter: " + audioPaddingAfter);
             }
 
             console.log("[CEP] Transition: " + transition);
+            console.log("[CEP] Video padding: " + videoPaddingBefore + "/" + videoPaddingAfter);
+            console.log("[CEP] Audio padding: " + audioPaddingBefore + "/" + audioPaddingAfter);
 
             let processedCount = 0;
             let totalDeletedCount = 0;
@@ -655,8 +672,10 @@ const CEP = (function() {
 
                 const processOptions = {
                     segments: batch,
-                    paddingBefore: paddingBefore,
-                    paddingAfter: paddingAfter,
+                    paddingBefore: videoPaddingBefore,
+                    paddingAfter: videoPaddingAfter,
+                    videoPaddingBefore: videoPaddingBefore,
+                    videoPaddingAfter: videoPaddingAfter,
                     audioPaddingBefore: audioPaddingBefore,
                     audioPaddingAfter: audioPaddingAfter,
                     silenceAction: silenceAction,
