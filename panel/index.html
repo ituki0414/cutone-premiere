@@ -21,6 +21,11 @@
                 <span class="version-badge">v1.0</span>
             </div>
             <div class="header-actions">
+                <button class="icon-btn" id="darkModeBtn" title="ダークモード切替">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="darkModeIcon">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
                 <button class="lang-btn" id="langBtn" title="Language">
                     <span id="langLabel">JA</span>
                 </button>
@@ -373,16 +378,96 @@
                     <span class="threshold-value" id="thresholdValue">-35dB</span>
                 </div>
 
+                <!-- Use Case Presets -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                        用途別プリセット
+                    </h3>
+                    <p class="settings-card-subtitle">コンテンツタイプに最適化された設定</p>
+                    <div class="usecase-presets">
+                        <button class="usecase-preset-btn" data-usecase="podcast" title="ポッドキャスト向け（ゆったり）">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                <line x1="12" y1="19" x2="12" y2="23"/>
+                                <line x1="8" y1="23" x2="16" y2="23"/>
+                            </svg>
+                            <span>ポッドキャスト</span>
+                        </button>
+                        <button class="usecase-preset-btn" data-usecase="interview" title="インタビュー向け（自然な間）">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            <span>インタビュー</span>
+                        </button>
+                        <button class="usecase-preset-btn" data-usecase="vlog" title="Vlog向け（テンポ良く）">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="23 7 16 12 23 17 23 7"/>
+                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                            </svg>
+                            <span>Vlog</span>
+                        </button>
+                        <button class="usecase-preset-btn" data-usecase="tutorial" title="チュートリアル向け（説明重視）">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                            </svg>
+                            <span>チュートリアル</span>
+                        </button>
+                        <button class="usecase-preset-btn" data-usecase="asmr" title="ASMR向け（繊細な音を保持）">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18V5l12-2v13"/>
+                                <circle cx="6" cy="18" r="3"/>
+                                <circle cx="18" cy="16" r="3"/>
+                            </svg>
+                            <span>ASMR</span>
+                        </button>
+                    </div>
+                    <div class="auto-threshold-row">
+                        <button class="btn-secondary btn-small" id="autoThresholdBtn" title="波形から最適な閾値を自動検出">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 16v-4"/>
+                                <path d="M12 8h.01"/>
+                            </svg>
+                            閾値を自動検出
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Pacing Section -->
                 <div class="settings-card">
-                    <h3 class="settings-card-title" data-i18n="settings.pacing">ペーシング</h3>
+                    <div class="settings-card-header">
+                        <h3 class="settings-card-title" data-i18n="settings.pacing">ペーシング</h3>
+                        <button class="save-preset-btn" id="savePresetBtn" title="現在の設定をプリセットとして保存">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17 21 17 13 7 13 7 21"/>
+                                <polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                            <span>保存</span>
+                        </button>
+                    </div>
                     <p class="settings-card-subtitle" data-i18n="settings.defaultPreset">デフォルトプリセット</p>
                     <div class="preset-btns">
-                        <button class="preset-btn" data-preset="calm" data-i18n="settings.presetCalm">落ち着いた</button>
-                        <button class="preset-btn" data-preset="careful" data-i18n="settings.presetCareful">慎重な</button>
-                        <button class="preset-btn active" data-preset="good" data-i18n="settings.presetGood">ペースの良い</button>
-                        <button class="preset-btn" data-preset="energetic" data-i18n="settings.presetEnergetic">エネルギッシュ</button>
-                        <button class="preset-btn" data-preset="quick" data-i18n="settings.presetQuick">軽快な</button>
+                        <button class="preset-btn" data-preset="calm" data-i18n="settings.presetCalm" title="ゆっくりとした編集向け">落ち着いた</button>
+                        <button class="preset-btn" data-preset="careful" data-i18n="settings.presetCareful" title="丁寧な編集向け">慎重な</button>
+                        <button class="preset-btn active" data-preset="good" data-i18n="settings.presetGood" title="バランスの良い編集">ペースの良い</button>
+                        <button class="preset-btn" data-preset="energetic" data-i18n="settings.presetEnergetic" title="テンポの速い編集向け">エネルギッシュ</button>
+                        <button class="preset-btn" data-preset="quick" data-i18n="settings.presetQuick" title="最速の編集向け">軽快な</button>
+                    </div>
+                    <!-- Custom Presets -->
+                    <div class="custom-presets" id="customPresetsContainer" style="display: none;">
+                        <p class="custom-presets-label">保存したプリセット</p>
+                        <div class="custom-presets-list" id="customPresetsList"></div>
                     </div>
                 </div>
 
@@ -524,6 +609,27 @@
                             <span data-i18n="settings.legendThreshold">ノイズ閾値</span>
                         </div>
                     </div>
+                    <!-- Detected Segments List -->
+                    <div class="segment-list-container" id="segmentListContainer" style="display: none;">
+                        <div class="segment-list-header">
+                            <span class="segment-list-title">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="7" height="7"/>
+                                    <rect x="14" y="3" width="7" height="7"/>
+                                    <rect x="14" y="14" width="7" height="7"/>
+                                    <rect x="3" y="14" width="7" height="7"/>
+                                </svg>
+                                検出セグメント (<span id="segmentCount">0</span>)
+                            </span>
+                            <div class="segment-list-actions">
+                                <button class="segment-action-btn" id="selectAllSegments" title="すべて選択">全選択</button>
+                                <button class="segment-action-btn" id="deselectAllSegments" title="すべて解除">全解除</button>
+                            </div>
+                        </div>
+                        <div class="segment-list" id="segmentList">
+                            <!-- Segments will be rendered here -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Sequence Info Bar -->
@@ -565,6 +671,26 @@
                             <span class="stat-label" data-i18n="main.saved">削減</span>
                         </div>
                     </div>
+                    <button class="copy-result-btn" id="copyResultBtn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                        結果をコピー
+                    </button>
+                </div>
+
+                <!-- Processing Log -->
+                <div class="processing-log-container" id="processingLogContainer" style="display: none;">
+                    <div class="processing-log-header">
+                        <span>処理ログ</span>
+                        <button class="log-toggle-btn" id="toggleLogBtn" title="ログを折りたたむ">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="processing-log-content"></div>
                 </div>
             </div>
         </div>
@@ -668,6 +794,144 @@
                     </div>
                 </div>
 
+                <!-- LLM Post-Processing Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                        LLM後処理（精度向上）
+                    </h3>
+                    <p class="settings-card-desc">AIで文字起こし結果を修正・補正</p>
+                    <div class="checkbox-group" style="margin-top: 12px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableLLMPostProcess" checked>
+                            <span class="checkbox-box"></span>
+                            <div class="checkbox-content">
+                                <span>LLM後処理を有効にする</span>
+                                <span class="checkbox-hint">誤字脱字・句読点・専門用語を補正</span>
+                            </div>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="useBatchAPI" checked>
+                            <span class="checkbox-box"></span>
+                            <div class="checkbox-content">
+                                <span>Batch API（50%コスト削減）</span>
+                                <span class="checkbox-hint">24時間以内に処理・急がない場合に最適</span>
+                            </div>
+                        </label>
+                    </div>
+                    <div id="llmModelSection" style="margin-top: 16px;">
+                        <p class="input-hint" style="margin-bottom: 8px;">後処理に使用するモデル:</p>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="llmModel" value="gpt-5-mini" checked>
+                                <span class="radio-dot"></span>
+                                <div class="radio-content">
+                                    <span>GPT-5 Mini</span>
+                                    <span class="radio-hint">高速・低コスト（推奨）</span>
+                                </div>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="llmModel" value="gpt-5.2">
+                                <span class="radio-dot"></span>
+                                <div class="radio-content">
+                                    <span>GPT-5.2</span>
+                                    <span class="radio-hint">高精度</span>
+                                </div>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="llmModel" value="gpt-5.2-pro">
+                                <span class="radio-dot"></span>
+                                <div class="radio-content">
+                                    <span>GPT-5.2 Pro</span>
+                                    <span class="radio-hint">より賢く正確</span>
+                                </div>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="llmModel" value="gpt-5-nano">
+                                <span class="radio-dot"></span>
+                                <div class="radio-content">
+                                    <span>GPT-5 Nano</span>
+                                    <span class="radio-hint">最速・最低コスト</span>
+                                </div>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="llmModel" value="gpt-4.1">
+                                <span class="radio-dot"></span>
+                                <div class="radio-content">
+                                    <span>GPT-4.1</span>
+                                    <span class="radio-hint">非推論モデル</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Subtitle Format Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        字幕フォーマット
+                    </h3>
+                    <p class="settings-card-desc">字幕の分割と表示形式を設定</p>
+
+                    <div class="format-grid" style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="input-group compact">
+                            <label>最大文字数</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="maxCharsPerSegment" class="input small" value="18" min="0" max="100" step="1">
+                                <span class="unit">文字</span>
+                            </div>
+                            <span class="input-hint">0 = 制限なし</span>
+                        </div>
+
+                        <div class="input-group compact">
+                            <label>最大行数</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="maxLinesPerSegment" class="input small" value="2" min="1" max="4" step="1">
+                                <span class="unit">行</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom Prompt Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        カスタムプロンプト
+                    </h3>
+                    <p class="settings-card-desc">専門用語やキーワードを入力すると文字起こし精度が向上します</p>
+                    <div class="form-group" style="margin-top: 12px;">
+                        <textarea id="customPrompt" class="input textarea-input" placeholder="例: Adobe Premiere Pro, After Effects, タイムライン, シーケンス, カラーグレーディング..." rows="3" style="resize: vertical; min-height: 60px;"></textarea>
+                        <p class="input-hint" style="margin-top: 8px;">
+                            動画内で使用する専門用語、人名、製品名、略語などをカンマ区切りで入力してください。
+                        </p>
+                    </div>
+                    <div class="prompt-presets" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;">
+                        <button class="prompt-preset-btn" data-preset="video" title="映像制作用語">
+                            映像制作
+                        </button>
+                        <button class="prompt-preset-btn" data-preset="tech" title="IT・テック用語">
+                            IT・テック
+                        </button>
+                        <button class="prompt-preset-btn" data-preset="business" title="ビジネス用語">
+                            ビジネス
+                        </button>
+                        <button class="prompt-preset-btn" data-preset="gaming" title="ゲーム用語">
+                            ゲーム
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Output Options Section -->
                 <div class="settings-card">
                     <h3 class="settings-card-title">
@@ -689,7 +953,147 @@
                             <input type="checkbox" id="exportSrt" checked>
                             <span class="checkbox-box"></span>
                             <span>SRTファイルを書き出し</span>
+                            <span class="export-format-badge">SRT</span>
                         </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="exportVtt">
+                            <span class="checkbox-box"></span>
+                            <span>VTTファイルを書き出し</span>
+                            <span class="export-format-badge">VTT</span>
+                        </label>
+                    </div>
+                    <button class="batch-export-btn" id="batchExportBtn" style="margin-top: 12px; width: 100%;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        SRT + VTT 一括書き出し
+                    </button>
+                </div>
+
+                <!-- Advanced Options Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        詳細オプション
+                    </h3>
+                    <div class="checkbox-group" style="margin-top: 12px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="removeFillerToggle">
+                            <span class="checkbox-box"></span>
+                            <div class="checkbox-content">
+                                <span>フィラー語を除去</span>
+                                <span class="checkbox-hint">「えー」「あのー」などを自動削除</span>
+                            </div>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="completionSoundToggle">
+                            <span class="checkbox-box"></span>
+                            <div class="checkbox-content">
+                                <span>完了時にサウンドを再生</span>
+                                <span class="checkbox-hint">処理完了を音で通知</span>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="settings-actions" style="margin-top: 16px; display: flex; gap: 8px;">
+                        <button class="btn-secondary btn-small" id="resetSettingsBtn" title="設定をデフォルトに戻す">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                <path d="M3 3v5h5"/>
+                            </svg>
+                            設定リセット
+                        </button>
+                        <button class="btn-secondary btn-small" id="mergeSegmentsBtn" title="選択したセグメントをマージ">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M8 6h13"/>
+                                <path d="M8 12h13"/>
+                                <path d="M8 18h13"/>
+                                <path d="M3 6h.01"/>
+                                <path d="M3 12h.01"/>
+                                <path d="M3 18h.01"/>
+                            </svg>
+                            セグメントマージ
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Settings Profiles -->
+                <div class="settings-card" id="profilesSection">
+                    <div class="settings-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="settings-card-title" style="margin: 0;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            設定プロファイル
+                        </h3>
+                        <button class="btn-text" id="saveProfileBtn" title="現在の設定を保存">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17 21 17 13 7 13 7 21"/>
+                                <polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                            保存
+                        </button>
+                    </div>
+                    <div class="profile-list" id="profileList" style="margin-top: 12px;">
+                        <div class="profile-empty">プロファイルがありません</div>
+                    </div>
+                </div>
+
+                <!-- Statistics Dashboard -->
+                <div class="settings-card" id="statsSection">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10"/>
+                            <line x1="12" y1="20" x2="12" y2="4"/>
+                            <line x1="6" y1="20" x2="6" y2="14"/>
+                        </svg>
+                        処理統計
+                    </h3>
+                    <div class="stats-dashboard" id="statsDashboard" style="margin-top: 12px;">
+                        <div class="stat-mini-card">
+                            <span class="stat-mini-value" id="statTotalProcessed">0</span>
+                            <span class="stat-mini-label">総処理回数</span>
+                        </div>
+                        <div class="stat-mini-card">
+                            <span class="stat-mini-value" id="statTotalSaved">0:00</span>
+                            <span class="stat-mini-label">累計短縮時間</span>
+                        </div>
+                        <div class="stat-mini-card">
+                            <span class="stat-mini-value" id="statAvgReduction">0%</span>
+                            <span class="stat-mini-label">平均削減率</span>
+                        </div>
+                        <div class="stat-mini-card">
+                            <span class="stat-mini-value" id="statTotalTranscribed">0</span>
+                            <span class="stat-mini-label">文字起こし回数</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing History Section -->
+                <div class="settings-card" id="historySection">
+                    <div class="settings-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="settings-card-title" style="margin: 0;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            処理履歴
+                        </h3>
+                        <button class="btn-text" id="clearHistoryBtn" title="履歴をクリア">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                            クリア
+                        </button>
+                    </div>
+                    <div id="historyContainer" class="history-container" style="margin-top: 12px; max-height: 150px; overflow-y: auto;">
+                        <div class="history-empty">履歴がありません</div>
                     </div>
                 </div>
 
@@ -714,6 +1118,16 @@
                             <span class="stat-value" id="transcriptionCharCount">0</span>
                         </div>
                     </div>
+                </div>
+
+                <!-- Quick Action -->
+                <div class="quick-action-bar">
+                    <button class="btn-quick" id="quickTranscribeBtn" title="デフォルト設定で即実行">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        <span>ワンクリック字幕生成</span>
+                    </button>
                 </div>
 
                 <!-- Action Buttons -->
@@ -776,6 +1190,30 @@
             <div class="overlay-content">
                 <div class="spinner"></div>
                 <p class="processing-text" id="processingText">処理中...</p>
+                <div class="processing-timer" id="processingTimer" style="display: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span>0:00</span>
+                </div>
+                <!-- Progress Stage Indicator -->
+                <div class="progress-stage-indicator" id="progressStageIndicator">
+                    <!-- Dynamic stages will be rendered here -->
+                </div>
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <span class="progress-percent" id="progressPercent">0%</span>
+                </div>
+                <button class="btn-cancel" id="cancelProcessBtn" style="display: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                    キャンセル
+                </button>
             </div>
         </div>
 

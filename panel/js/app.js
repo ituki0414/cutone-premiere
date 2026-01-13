@@ -53,6 +53,9 @@
         openaiApiLink: document.getElementById("openaiApiLink"),
         addToSequence: document.getElementById("addToSequence"),
         exportSrt: document.getElementById("exportSrt"),
+        exportVtt: document.getElementById("exportVtt"),
+        batchExportBtn: document.getElementById("batchExportBtn"),
+        darkModeBtn: document.getElementById("darkModeBtn"),
         transcriptionPreviewSection: document.getElementById("transcriptionPreviewSection"),
         transcriptionResult: document.getElementById("transcriptionResult"),
         transcriptionSegmentCount: document.getElementById("transcriptionSegmentCount"),
@@ -115,11 +118,18 @@
         // Overlay
         processingOverlay: document.getElementById("processingOverlay"),
         processingText: document.getElementById("processingText"),
+        progressContainer: document.getElementById("progressContainer"),
+        progressFill: document.getElementById("progressFill"),
+        progressPercent: document.getElementById("progressPercent"),
+        cancelProcessBtn: document.getElementById("cancelProcessBtn"),
 
         // Toast
         toast: document.getElementById("toast"),
         toastMessage: document.getElementById("toastMessage")
     };
+
+    // Cancellation state
+    let cancelRequested = false;
 
     // ============================================
     // State
@@ -136,6 +146,12 @@
     let transcriptionSegments = [];
     let isTranscribing = false;
 
+    // Undo state - stores last operation for undo
+    let lastOperationState = null;
+
+    // Auto-refresh interval
+    let autoRefreshInterval = null;
+
     // ============================================
     // Initialization
     // ============================================
@@ -147,6 +163,12 @@
         updateLanguageLabel(lang);
         console.log("[CutOne] i18n initialized, language:", lang);
 
+        // Load saved UI language preference
+        loadSavedUILanguage();
+
+        // Load dark mode preference
+        loadDarkModePreference();
+
         // Initialize CEP
         const cepResult = CEP.init();
         console.log("[CutOne] CEP initialized:", !!cepResult);
@@ -154,6 +176,19 @@
         // Setup event listeners
         setupEventListeners();
         console.log("[CutOne] Event listeners set up");
+
+        // Setup drag and drop
+        setupDragAndDrop();
+        console.log("[CutOne] Drag and drop set up");
+
+        // Start auto-refresh for sequence info
+        startAutoRefresh();
+        console.log("[CutOne] Auto-refresh started");
+
+        // Load processing history
+        loadHistoryFromStorage();
+        updateHistoryDisplay();
+        console.log("[CutOne] History loaded");
 
         // Check license status
         checkLicenseStatus();
@@ -172,15 +207,229 @@
         const newLang = currentLang === "ja" ? "en" : "ja";
         I18n.setLanguage(newLang);
         updateLanguageLabel(newLang);
+        // Save UI language preference
+        localStorage.setItem("cutone_ui_language", newLang);
     }
 
     function updateLanguageLabel(lang) {
         elements.langLabel.textContent = lang.toUpperCase();
     }
 
+    function loadSavedUILanguage() {
+        const savedLang = localStorage.getItem("cutone_ui_language");
+        if (savedLang && (savedLang === "ja" || savedLang === "en")) {
+            I18n.setLanguage(savedLang);
+            updateLanguageLabel(savedLang);
+        }
+    }
+
+    // ============================================
+    // Dark Mode
+    // ============================================
+    function toggleDarkMode() {
+        const isDark = document.body.classList.toggle("dark-mode");
+        localStorage.setItem("cutone_dark_mode", isDark ? "true" : "false");
+        updateDarkModeIcon(isDark);
+    }
+
+    function loadDarkModePreference() {
+        const saved = localStorage.getItem("cutone_dark_mode");
+        if (saved === "true") {
+            document.body.classList.add("dark-mode");
+            updateDarkModeIcon(true);
+        }
+    }
+
+    function updateDarkModeIcon(isDark) {
+        const icon = document.getElementById("darkModeIcon");
+        if (icon) {
+            if (isDark) {
+                // Sun icon for light mode toggle
+                icon.innerHTML = `<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>`;
+            } else {
+                // Moon icon for dark mode toggle
+                icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>`;
+            }
+        }
+    }
+
+    // ============================================
+    // Processing Timer
+    // ============================================
+    let processingStartTime = null;
+    let processingTimerInterval = null;
+
+    function startProcessingTimer() {
+        processingStartTime = Date.now();
+        updateProcessingTimeDisplay();
+        processingTimerInterval = setInterval(updateProcessingTimeDisplay, 1000);
+    }
+
+    function stopProcessingTimer() {
+        if (processingTimerInterval) {
+            clearInterval(processingTimerInterval);
+            processingTimerInterval = null;
+        }
+        processingStartTime = null;
+    }
+
+    function updateProcessingTimeDisplay() {
+        if (!processingStartTime) return;
+        const elapsed = Math.floor((Date.now() - processingStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        const timerDisplay = document.getElementById("processingTimer");
+        if (timerDisplay) {
+            // Update the span inside the timer div (not the entire div which contains the SVG)
+            const timerSpan = timerDisplay.querySelector("span");
+            if (timerSpan) {
+                timerSpan.textContent = timeText;
+            }
+        }
+    }
+
+    function formatElapsedTime(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // ============================================
+    // Processing Log
+    // ============================================
+    let processingLogs = [];
+
+    function addProcessingLog(message, type = "info") {
+        const timestamp = new Date().toLocaleTimeString();
+        processingLogs.push({ timestamp, message, type });
+        updateProcessingLogDisplay();
+    }
+
+    function clearProcessingLogs() {
+        processingLogs = [];
+        updateProcessingLogDisplay();
+    }
+
+    function updateProcessingLogDisplay() {
+        const logContainer = document.getElementById("processingLogContainer");
+        if (!logContainer) return;
+
+        if (processingLogs.length === 0) {
+            logContainer.style.display = "none";
+            return;
+        }
+
+        logContainer.style.display = "block";
+        const logContent = logContainer.querySelector(".processing-log-content");
+        if (logContent) {
+            logContent.innerHTML = processingLogs.map(log =>
+                `<div class="log-entry log-${log.type}">
+                    <span class="log-time">${log.timestamp}</span>
+                    <span class="log-message">${log.message}</span>
+                </div>`
+            ).join("");
+            // Auto-scroll to bottom
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+    }
+
+    // ============================================
+    // Silence Cut Presets
+    // ============================================
+    function saveSilencePreset(name) {
+        const preset = {
+            name: name,
+            threshold: parseInt(elements.thresholdSlider.value),
+            minSilenceDuration: parseInt(elements.minSilenceDuration.value),
+            minTalkDuration: parseInt(elements.minTalkDuration.value),
+            paddingBefore: parseInt(elements.paddingBefore.value),
+            paddingAfter: parseInt(elements.paddingAfter.value),
+            silenceAction: getSelectedSilenceAction(),
+            transition: getSelectedTransition()
+        };
+
+        // Get existing presets
+        let presets = JSON.parse(localStorage.getItem("cutone_silence_presets") || "[]");
+
+        // Check if preset with same name exists
+        const existingIndex = presets.findIndex(p => p.name === name);
+        if (existingIndex >= 0) {
+            presets[existingIndex] = preset;
+        } else {
+            presets.push(preset);
+        }
+
+        localStorage.setItem("cutone_silence_presets", JSON.stringify(presets));
+        showToast(`プリセット「${name}」を保存しました`, "success");
+        return preset;
+    }
+
+    function loadSilencePreset(preset) {
+        elements.thresholdSlider.value = preset.threshold;
+        updateThresholdDisplay();
+        elements.minSilenceDuration.value = preset.minSilenceDuration;
+        elements.minTalkDuration.value = preset.minTalkDuration;
+        elements.paddingBefore.value = preset.paddingBefore;
+        elements.paddingAfter.value = preset.paddingAfter;
+
+        // Set silence action radio
+        const actionRadio = document.querySelector(`input[name="silenceAction"][value="${preset.silenceAction}"]`);
+        if (actionRadio) actionRadio.checked = true;
+
+        // Set transition radio
+        const transitionRadio = document.querySelector(`input[name="transition"][value="${preset.transition}"]`);
+        if (transitionRadio) transitionRadio.checked = true;
+
+        showToast(`プリセット「${preset.name}」を読み込みました`, "success");
+    }
+
+    function getSavedSilencePresets() {
+        return JSON.parse(localStorage.getItem("cutone_silence_presets") || "[]");
+    }
+
+    function deleteSilencePreset(name) {
+        let presets = getSavedSilencePresets();
+        presets = presets.filter(p => p.name !== name);
+        localStorage.setItem("cutone_silence_presets", JSON.stringify(presets));
+        showToast(`プリセット「${name}」を削除しました`, "info");
+    }
+
+    function saveLastUsedSettings() {
+        const settings = {
+            threshold: parseInt(elements.thresholdSlider.value),
+            minSilenceDuration: parseInt(elements.minSilenceDuration.value),
+            minTalkDuration: parseInt(elements.minTalkDuration.value),
+            paddingBefore: parseInt(elements.paddingBefore.value),
+            paddingAfter: parseInt(elements.paddingAfter.value),
+            silenceAction: getSelectedSilenceAction(),
+            transition: getSelectedTransition()
+        };
+        localStorage.setItem("cutone_last_silence_settings", JSON.stringify(settings));
+    }
+
+    function loadLastUsedSettings() {
+        const saved = localStorage.getItem("cutone_last_silence_settings");
+        if (saved) {
+            try {
+                const settings = JSON.parse(saved);
+                loadSilencePreset({ ...settings, name: "前回の設定" });
+            } catch (e) {
+                console.log("[CutOne] Failed to load last settings");
+            }
+        }
+    }
+
     function setupEventListeners() {
         // Language switcher
         elements.langBtn.addEventListener("click", toggleLanguage);
+
+        // Dark mode toggle
+        if (elements.darkModeBtn) {
+            elements.darkModeBtn.addEventListener("click", toggleDarkMode);
+        }
 
         // Auth screen buttons
         elements.startTrialBtn.addEventListener("click", showTrialScreen);
@@ -208,6 +457,124 @@
         elements.startTranscriptionBtn.addEventListener("click", startTranscription);
         elements.reTranscribeBtn.addEventListener("click", resetTranscription);
         elements.applyTranscriptionBtn.addEventListener("click", applyTranscription);
+
+        // Quick transcription button (one-click execution)
+        const quickTranscribeBtn = document.getElementById("quickTranscribeBtn");
+        if (quickTranscribeBtn) {
+            quickTranscribeBtn.addEventListener("click", quickTranscribe);
+        }
+
+        // API key real-time validation
+        elements.openaiApiKey.addEventListener("input", (e) => {
+            const key = e.target.value.trim();
+            validateApiKeyFormat(key);
+            // Auto-save on valid input
+            if (key && key.startsWith("sk-") && key.length > 20) {
+                saveApiKey(key);
+            }
+        });
+
+        // Output options persistence
+        elements.addToSequence.addEventListener("change", saveOutputOptions);
+        elements.exportSrt.addEventListener("change", saveOutputOptions);
+        if (elements.exportVtt) {
+            elements.exportVtt.addEventListener("change", saveOutputOptions);
+        }
+
+        // Batch export button
+        if (elements.batchExportBtn) {
+            elements.batchExportBtn.addEventListener("click", async () => {
+                if (transcriptionSegments.length === 0) {
+                    showToast("文字起こし結果がありません", "error");
+                    return;
+                }
+                showLoading("一括エクスポート中...");
+                const result = await batchExportCaptions(transcriptionSegments);
+                hideLoading();
+                if (result.cancelled) {
+                    showToast("エクスポートをキャンセルしました", "info");
+                } else if (result.success) {
+                    showToast(`${result.formats.join(" + ")} を書き出しました`, "success");
+                }
+            });
+        }
+
+        // Settings reset button
+        const resetBtn = document.getElementById("resetSettingsBtn");
+        if (resetBtn) {
+            resetBtn.addEventListener("click", resetAllSettings);
+        }
+
+        // Merge segments button
+        const mergeBtn = document.getElementById("mergeSegmentsBtn");
+        if (mergeBtn) {
+            mergeBtn.addEventListener("click", mergeSelectedSegments);
+        }
+
+        // Clear history button
+        const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener("click", clearHistory);
+        }
+
+        // Segment list buttons
+        const selectAllBtn = document.getElementById("selectAllSegments");
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener("click", selectAllSegments);
+        }
+        const deselectAllBtn = document.getElementById("deselectAllSegments");
+        if (deselectAllBtn) {
+            deselectAllBtn.addEventListener("click", deselectAllSegments);
+        }
+
+        // Profile save button
+        const saveProfileBtn = document.getElementById("saveProfileBtn");
+        if (saveProfileBtn) {
+            saveProfileBtn.addEventListener("click", saveProfile);
+        }
+
+        // Initialize profiles and stats
+        updateProfileList();
+        updateStatsDashboard();
+
+        // Setup waveform interaction
+        setupWaveformInteraction();
+
+        // Completion sound option
+        const soundToggle = document.getElementById("completionSoundToggle");
+        if (soundToggle) {
+            soundToggle.addEventListener("change", (e) => {
+                localStorage.setItem("cutone_completion_sound", e.target.checked ? "true" : "false");
+            });
+        }
+
+        // Filler removal option
+        const fillerToggle = document.getElementById("removeFillerToggle");
+        if (fillerToggle) {
+            fillerToggle.addEventListener("change", (e) => {
+                localStorage.setItem("cutone_remove_filler", e.target.checked ? "true" : "false");
+            });
+        }
+
+        // LLM post-processing toggle
+        const llmToggle = document.getElementById("enableLLMPostProcess");
+        const llmModelSection = document.getElementById("llmModelSection");
+        if (llmToggle) {
+            llmToggle.addEventListener("change", (e) => {
+                localStorage.setItem("cutone_enable_llm", e.target.checked ? "true" : "false");
+                if (llmModelSection) {
+                    llmModelSection.style.display = e.target.checked ? "block" : "none";
+                }
+            });
+        }
+
+        // LLM model selection
+        const llmModelRadios = document.querySelectorAll('input[name="llmModel"]');
+        llmModelRadios.forEach(radio => {
+            radio.addEventListener("change", (e) => {
+                localStorage.setItem("cutone_llm_model", e.target.value);
+            });
+        });
 
         // Wizard navigation
         elements.nextStepBtn.addEventListener("click", goToStep2);
@@ -266,6 +633,209 @@
         elements.licenseKey.addEventListener("keypress", (e) => {
             if (e.key === "Enter") activateLicense();
         });
+
+        // Global keyboard shortcuts
+        document.addEventListener("keydown", handleKeyboardShortcuts);
+
+        // Preset save button
+        const savePresetBtn = document.getElementById("savePresetBtn");
+        if (savePresetBtn) {
+            savePresetBtn.addEventListener("click", promptSavePreset);
+        }
+
+        // Log toggle button
+        const toggleLogBtn = document.getElementById("toggleLogBtn");
+        if (toggleLogBtn) {
+            toggleLogBtn.addEventListener("click", toggleProcessingLog);
+        }
+
+        // Load and display custom presets
+        displayCustomPresets();
+
+        // Use case presets
+        document.querySelectorAll(".usecase-preset-btn").forEach(btn => {
+            btn.addEventListener("click", () => applyUseCasePreset(btn.dataset.usecase));
+        });
+
+        // Auto threshold detection
+        const autoThresholdBtn = document.getElementById("autoThresholdBtn");
+        if (autoThresholdBtn) {
+            autoThresholdBtn.addEventListener("click", autoDetectThreshold);
+        }
+
+        // Copy result button
+        const copyResultBtn = document.getElementById("copyResultBtn");
+        if (copyResultBtn) {
+            copyResultBtn.addEventListener("click", copyResultToClipboard);
+        }
+
+        // Prompt preset buttons for transcription
+        document.querySelectorAll(".prompt-preset-btn").forEach(btn => {
+            btn.addEventListener("click", () => applyPromptPreset(btn.dataset.preset));
+        });
+    }
+
+    /**
+     * Apply a prompt preset to the custom prompt textarea
+     */
+    function applyPromptPreset(presetName) {
+        const customPromptEl = document.getElementById("customPrompt");
+        if (!customPromptEl) return;
+
+        const presetContent = CEP.getPromptPreset(presetName);
+        if (!presetContent) return;
+
+        // Append to existing content if there's already text
+        const currentValue = customPromptEl.value.trim();
+        if (currentValue) {
+            customPromptEl.value = currentValue + ", " + presetContent;
+        } else {
+            customPromptEl.value = presetContent;
+        }
+
+        // Toggle active state on buttons
+        document.querySelectorAll(".prompt-preset-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.preset === presetName);
+        });
+
+        showToast(`${getPromptPresetLabel(presetName)}用語を追加しました`, "success");
+    }
+
+    /**
+     * Get label for prompt preset
+     */
+    function getPromptPresetLabel(presetName) {
+        const labels = {
+            video: "映像制作",
+            tech: "IT・テック",
+            business: "ビジネス",
+            gaming: "ゲーム"
+        };
+        return labels[presetName] || presetName;
+    }
+
+    function promptSavePreset() {
+        const name = prompt("プリセット名を入力してください:");
+        if (name && name.trim()) {
+            saveSilencePreset(name.trim());
+            displayCustomPresets();
+        }
+    }
+
+    function displayCustomPresets() {
+        const presets = getSavedSilencePresets();
+        const container = document.getElementById("customPresetsContainer");
+        const list = document.getElementById("customPresetsList");
+
+        if (!container || !list) return;
+
+        if (presets.length === 0) {
+            container.style.display = "none";
+            return;
+        }
+
+        container.style.display = "block";
+        list.innerHTML = presets.map(preset => `
+            <div class="custom-preset-item">
+                <span class="preset-name" onclick="window.AppFunctions.loadPreset('${preset.name}')">${preset.name}</span>
+                <button class="preset-delete" onclick="window.AppFunctions.deletePreset('${preset.name}')" title="削除">×</button>
+            </div>
+        `).join("");
+    }
+
+    function toggleProcessingLog() {
+        const container = document.getElementById("processingLogContainer");
+        const content = container?.querySelector(".processing-log-content");
+        const btn = document.getElementById("toggleLogBtn");
+
+        if (content) {
+            if (content.style.display === "none") {
+                content.style.display = "block";
+                if (btn) btn.style.transform = "rotate(0deg)";
+            } else {
+                content.style.display = "none";
+                if (btn) btn.style.transform = "rotate(-90deg)";
+            }
+        }
+    }
+
+    // ============================================
+    // Keyboard Shortcuts
+    // ============================================
+    function handleKeyboardShortcuts(e) {
+        // Don't trigger shortcuts when typing in inputs
+        if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) {
+            // Only allow Escape to cancel
+            if (e.key === "Escape" && !elements.processingOverlay.classList.contains("hidden")) {
+                e.preventDefault();
+                triggerCancel();
+            }
+            return;
+        }
+
+        // Escape - Cancel current operation
+        if (e.key === "Escape") {
+            if (!elements.processingOverlay.classList.contains("hidden")) {
+                e.preventDefault();
+                triggerCancel();
+            }
+            return;
+        }
+
+        // Enter/Cmd+Enter - Execute main action
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            executeMainAction();
+            return;
+        }
+
+        // R - Refresh sequence info
+        if (e.key === "r" && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault();
+            if (!elements.silenceScreen.classList.contains("hidden")) {
+                refreshSequenceInfo();
+            } else if (!elements.transcriptionScreen.classList.contains("hidden")) {
+                refreshTranscriptionSequenceInfo();
+            }
+            return;
+        }
+
+        // Cmd+Z - Show undo hint (actual undo is in Premiere Pro)
+        if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+            // Don't prevent default - let Premiere Pro handle it
+            // Just show a hint if we have a recent operation
+            if (lastOperationState) {
+                showToast("Premiere Proでアンドゥを実行中...", "info");
+            }
+            return;
+        }
+    }
+
+    function triggerCancel() {
+        const cancelBtn = elements.cancelProcessBtn;
+        if (cancelBtn && cancelBtn.style.display !== "none") {
+            cancelBtn.click();
+            showToast("キャンセルしました (Esc)", "info");
+        }
+    }
+
+    function executeMainAction() {
+        // Determine which screen is active and execute the main action
+        if (!elements.silenceScreen.classList.contains("hidden")) {
+            // Silence screen
+            if (currentWizardStep === 1) {
+                goToStep2();
+            } else {
+                processSequence();
+            }
+        } else if (!elements.transcriptionScreen.classList.contains("hidden")) {
+            // Transcription screen
+            if (transcriptionSegments.length > 0) {
+                applyTranscription();
+            } else {
+                startTranscription();
+            }
+        }
     }
 
     function updateSliderDisplays() {
@@ -342,11 +912,25 @@
         updateWizardUI();
         // Reset preview
         resetPreviewWaveform();
+        // Load last used settings
+        loadLastUsedSettings();
     }
 
     function showTranscriptionScreen() {
         showScreen("transcription");
-        // Reset transcription state
+        // Load saved API key
+        loadSavedApiKey();
+        // Load saved language preference
+        loadSavedLanguage();
+        // Load saved output options
+        loadOutputOptions();
+        // Load saved completion sound option
+        loadCompletionSoundOption();
+        // Load saved filler removal option
+        loadFillerRemovalOption();
+        // Refresh sequence info
+        refreshTranscriptionSequenceInfo();
+        // Reset transcription state (but keep API key)
         resetTranscription();
     }
 
@@ -355,37 +939,19 @@
     // ============================================
 
     async function refreshTranscriptionSequenceInfo() {
-        console.log("[CutOne] refreshTranscriptionSequenceInfo called");
-
-        // DEBUG: Show that we're trying to get sequence
-        elements.transcriptionSequenceName.textContent = "取得中...";
-
         try {
-            console.log("[CutOne] Calling CEP.getActiveSequence()...");
             const result = await CEP.getActiveSequence();
-            console.log("[CutOne] CEP.getActiveSequence() returned:", JSON.stringify(result));
-
             if (result && result.success) {
                 currentSequence = result;
                 elements.transcriptionSequenceName.textContent = result.name;
                 elements.transcriptionSequenceDuration.textContent = result.durationFormatted;
-                console.log("[CutOne] Transcription screen - Sequence loaded:", result.name);
             } else {
                 currentSequence = null;
-                // DEBUG: Show actual result for debugging
-                elements.transcriptionSequenceName.textContent = "結果: " + JSON.stringify(result);
+                elements.transcriptionSequenceName.textContent = I18n.t("main.noSequence");
                 elements.transcriptionSequenceDuration.textContent = "--:--";
-                console.log("[CutOne] Transcription screen - No sequence, result:", result);
             }
         } catch (e) {
-            // When callExtendScript rejects (success: false), this is triggered
-            // Update UI to show no sequence
-            currentSequence = null;
-            // DEBUG: Show actual error for debugging
-            const errorMsg = e.message || e.toString() || "unknown error";
-            elements.transcriptionSequenceName.textContent = "エラー: " + errorMsg;
-            elements.transcriptionSequenceDuration.textContent = "--:--";
-            console.error("[CutOne] Transcription screen - Error getting sequence:", errorMsg);
+            console.error("[CutOne] Error getting sequence:", e);
         }
     }
 
@@ -407,6 +973,8 @@
         const savedKey = localStorage.getItem("cutone_openai_api_key");
         if (savedKey) {
             elements.openaiApiKey.value = savedKey;
+            // Show validation indicator
+            validateApiKeyFormat(savedKey);
         }
     }
 
@@ -414,9 +982,1482 @@
         localStorage.setItem("cutone_openai_api_key", key);
     }
 
+    function validateApiKeyFormat(key) {
+        const input = elements.openaiApiKey;
+        const container = input.parentElement;
+
+        // Remove any existing status indicator
+        let indicator = container.querySelector(".api-key-status");
+        if (!indicator) {
+            indicator = document.createElement("span");
+            indicator.className = "api-key-status";
+            container.appendChild(indicator);
+        }
+
+        if (!key || key.length === 0) {
+            // Empty - neutral state
+            input.style.borderColor = "";
+            indicator.textContent = "";
+            indicator.className = "api-key-status";
+        } else if (key.startsWith("sk-") && key.length > 20) {
+            // Valid format
+            input.style.borderColor = "#22c55e";
+            indicator.textContent = "✓";
+            indicator.className = "api-key-status valid";
+        } else if (key.startsWith("sk-")) {
+            // Partial valid
+            input.style.borderColor = "#f59e0b";
+            indicator.textContent = "";
+            indicator.className = "api-key-status";
+        } else {
+            // Invalid format
+            input.style.borderColor = "#ef4444";
+            indicator.textContent = "sk-で始まる必要があります";
+            indicator.className = "api-key-status invalid";
+        }
+    }
+
+    function saveOutputOptions() {
+        const options = {
+            addToSequence: elements.addToSequence.checked,
+            exportSrt: elements.exportSrt.checked,
+            exportVtt: elements.exportVtt ? elements.exportVtt.checked : false
+        };
+        localStorage.setItem("cutone_output_options", JSON.stringify(options));
+    }
+
+    function loadOutputOptions() {
+        const saved = localStorage.getItem("cutone_output_options");
+        if (saved) {
+            try {
+                const options = JSON.parse(saved);
+                if (typeof options.addToSequence === "boolean") {
+                    elements.addToSequence.checked = options.addToSequence;
+                }
+                if (typeof options.exportSrt === "boolean") {
+                    elements.exportSrt.checked = options.exportSrt;
+                }
+                if (typeof options.exportVtt === "boolean" && elements.exportVtt) {
+                    elements.exportVtt.checked = options.exportVtt;
+                }
+            } catch (e) {
+                console.log("[CutOne] Failed to parse output options");
+            }
+        }
+    }
+
+    // ============================================
+    // VTT Export
+    // ============================================
+    function generateVTT(segments) {
+        let vtt = "WEBVTT\n\n";
+
+        segments.forEach((seg, index) => {
+            const startTime = formatVTTTime(seg.start);
+            const endTime = formatVTTTime(seg.end);
+            vtt += `${index + 1}\n`;
+            vtt += `${startTime} --> ${endTime}\n`;
+            vtt += `${seg.text}\n\n`;
+        });
+
+        return vtt;
+    }
+
+    function formatVTTTime(seconds) {
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds % 1) * 1000);
+        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    }
+
+    // ============================================
+    // Drag & Drop Support
+    // ============================================
+    function setupDragAndDrop() {
+        const screens = [elements.silenceScreen, elements.transcriptionScreen];
+
+        screens.forEach(screen => {
+            if (!screen) return;
+
+            screen.addEventListener("dragover", handleDragOver);
+            screen.addEventListener("dragleave", handleDragLeave);
+            screen.addEventListener("drop", handleDrop);
+        });
+
+        // Also add to the main app container for global drop support
+        const app = document.getElementById("app");
+        if (app) {
+            app.addEventListener("dragover", handleDragOver);
+            app.addEventListener("dragleave", handleDragLeave);
+            app.addEventListener("drop", handleDrop);
+        }
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Only show drag indicator for file drops
+        if (e.dataTransfer.types.includes("Files")) {
+            e.currentTarget.classList.add("drag-over");
+            e.dataTransfer.dropEffect = "copy";
+        }
+    }
+
+    function handleDragLeave(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.classList.remove("drag-over");
+    }
+
+    async function handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.classList.remove("drag-over");
+
+        const files = e.dataTransfer.files;
+        if (files.length === 0) return;
+
+        const file = files[0];
+        const fileName = file.name.toLowerCase();
+
+        // Check if it's an SRT file for import
+        if (fileName.endsWith(".srt")) {
+            handleSRTImport(file);
+            return;
+        }
+
+        // Check if it's an audio/video file
+        const mediaExtensions = [".mp4", ".mov", ".avi", ".mkv", ".mp3", ".wav", ".m4a", ".aac", ".flac"];
+        const isMedia = mediaExtensions.some(ext => fileName.endsWith(ext));
+
+        if (isMedia) {
+            showToast(`${file.name} をインポートしています...`, "info");
+            try {
+                // Import the file to project
+                const result = await CEP.callExtendScript("importFileToProject", [file.path]);
+                if (result && result.success) {
+                    showToast(`${file.name} をプロジェクトにインポートしました`, "success");
+                    refreshSequenceInfo();
+                } else {
+                    showToast("ファイルのインポートに失敗しました", "error");
+                }
+            } catch (err) {
+                console.error("[CutOne] Import error:", err);
+                showToast("ファイルのインポートに失敗しました", "error");
+            }
+        } else {
+            showToast("サポートされていないファイル形式です", "error");
+        }
+    }
+
+    async function handleSRTImport(file) {
+        showToast(`${file.name} を読み込んでいます...`, "info");
+
+        try {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const content = e.target.result;
+                const segments = parseSRT(content);
+
+                if (segments.length > 0) {
+                    transcriptionSegments = segments;
+                    displayTranscriptionResult(segments);
+                    showToast(`${segments.length}個のセグメントを読み込みました`, "success");
+
+                    // Switch to transcription screen if not already there
+                    if (elements.transcriptionScreen.classList.contains("hidden")) {
+                        showTranscriptionScreen();
+                    }
+                } else {
+                    showToast("SRTファイルのパースに失敗しました", "error");
+                }
+            };
+            reader.readAsText(file);
+        } catch (err) {
+            console.error("[CutOne] SRT import error:", err);
+            showToast("SRTファイルの読み込みに失敗しました", "error");
+        }
+    }
+
+    function parseSRT(content) {
+        const segments = [];
+        const blocks = content.trim().split(/\n\n+/);
+
+        for (const block of blocks) {
+            const lines = block.split("\n");
+            if (lines.length >= 3) {
+                // Parse timestamp line (format: 00:00:00,000 --> 00:00:00,000)
+                const timeMatch = lines[1].match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+                if (timeMatch) {
+                    const start = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+                    const end = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+                    const text = lines.slice(2).join(" ").trim();
+
+                    segments.push({ start, end, text });
+                }
+            }
+        }
+
+        return segments;
+    }
+
+    // ============================================
+    // Confirmation Dialog
+    // ============================================
+    function showConfirmationDialog(options, segments, excludedCount = 0) {
+        return new Promise((resolve) => {
+            const totalSilenceDuration = segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
+            const estimatedNewDuration = currentSequence.duration - totalSilenceDuration;
+            const savedPercent = ((totalSilenceDuration / currentSequence.duration) * 100).toFixed(1);
+
+            const actionLabels = {
+                delete: "無音部分を削除",
+                disable: "無音部分を無効化",
+                deleteKeepSpace: "削除（スペース保持）",
+                keep: "マーカーのみ追加"
+            };
+
+            const excludedNote = excludedCount > 0
+                ? `<div class="info-row"><span class="info-label">除外セグメント</span><span class="info-value muted">${excludedCount}箇所（処理対象外）</span></div>`
+                : "";
+
+            const dialog = document.createElement("div");
+            dialog.className = "confirmation-dialog-overlay";
+            dialog.innerHTML = `
+                <div class="confirmation-dialog">
+                    <div class="confirmation-header">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="16" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        <h3>処理の確認</h3>
+                    </div>
+                    <div class="confirmation-content">
+                        <div class="confirmation-info">
+                            <div class="info-row">
+                                <span class="info-label">シーケンス</span>
+                                <span class="info-value">${currentSequence.name}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">元の長さ</span>
+                                <span class="info-value">${currentSequence.durationFormatted}</span>
+                            </div>
+                            <div class="info-row highlight">
+                                <span class="info-label">処理対象の無音</span>
+                                <span class="info-value">${segments.length}箇所 (${formatTime(totalSilenceDuration)})</span>
+                            </div>
+                            ${excludedNote}
+                            <div class="info-row highlight">
+                                <span class="info-label">予想削減率</span>
+                                <span class="info-value accent">-${savedPercent}%</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">処理内容</span>
+                                <span class="info-value">${actionLabels[options.silenceAction] || options.silenceAction}</span>
+                            </div>
+                        </div>
+                        <div class="confirmation-warning">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            <span>この操作は取り消し可能です（Cmd+Z / 編集メニューから）</span>
+                        </div>
+                    </div>
+                    <div class="confirmation-actions">
+                        <button class="btn-secondary" id="confirmCancel">キャンセル</button>
+                        <button class="btn-primary" id="confirmProceed">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                            処理を実行
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(dialog);
+
+            // Animate in
+            requestAnimationFrame(() => {
+                dialog.classList.add("visible");
+            });
+
+            const closeDialog = (result) => {
+                dialog.classList.remove("visible");
+                setTimeout(() => {
+                    dialog.remove();
+                    resolve(result);
+                }, 200);
+            };
+
+            dialog.querySelector("#confirmCancel").addEventListener("click", () => closeDialog(false));
+            dialog.querySelector("#confirmProceed").addEventListener("click", () => closeDialog(true));
+            dialog.addEventListener("click", (e) => {
+                if (e.target === dialog) closeDialog(false);
+            });
+        });
+    }
+
+    // ============================================
+    // Undo Support
+    // ============================================
+    function saveOperationState(operationType, data) {
+        lastOperationState = {
+            type: operationType,
+            timestamp: Date.now(),
+            data: data
+        };
+        // Show undo hint
+        showToast("Cmd+Z でアンドゥできます", "info");
+    }
+
+    async function undoLastOperation() {
+        if (!lastOperationState) {
+            showToast("アンドゥする操作がありません", "info");
+            return;
+        }
+
+        showToast("Premiere Proの編集メニューからアンドゥしてください", "info");
+        lastOperationState = null;
+    }
+
+    // ============================================
+    // Auto-refresh Sequence Info
+    // ============================================
+    function startAutoRefresh() {
+        // Stop any existing interval
+        stopAutoRefresh();
+
+        // Refresh every 5 seconds when on silence/transcription screen
+        autoRefreshInterval = setInterval(() => {
+            if (!elements.silenceScreen.classList.contains("hidden")) {
+                refreshSequenceInfo();
+            } else if (!elements.transcriptionScreen.classList.contains("hidden")) {
+                refreshTranscriptionSequenceInfo();
+            }
+        }, 5000);
+
+        // Also refresh on window focus
+        window.addEventListener("focus", handleWindowFocus);
+    }
+
+    function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+        window.removeEventListener("focus", handleWindowFocus);
+    }
+
+    function handleWindowFocus() {
+        if (!elements.silenceScreen.classList.contains("hidden")) {
+            refreshSequenceInfo();
+        } else if (!elements.transcriptionScreen.classList.contains("hidden")) {
+            refreshTranscriptionSequenceInfo();
+        }
+    }
+
+    // ============================================
+    // Batch Export (SRT + VTT)
+    // ============================================
+    async function batchExportCaptions(segments) {
+        const results = [];
+        const sequenceResult = await CEP.callExtendScript("getSequenceInfo", []);
+        let defaultPath = getLastExportPath(); // Use saved export path
+        const baseName = currentSequence?.name || "captions";
+
+        // Fallback to project path if no saved export path
+        if (!defaultPath && sequenceResult && sequenceResult.projectPath) {
+            defaultPath = sequenceResult.projectPath.replace(/[^/\\]+$/, "");
+        }
+
+        // Ask for base filename once
+        const dialogResult = await CEP.callExtendScript("showSaveDialog", [baseName, defaultPath]);
+
+        if (!dialogResult || !dialogResult.success || dialogResult.cancelled) {
+            return { cancelled: true };
+        }
+
+        const basePath = dialogResult.path.replace(/\.srt$/i, "");
+
+        // Save the export directory for next time
+        const exportDir = basePath.replace(/[^/\\]+$/, "");
+        saveLastExportPath(exportDir);
+
+        // Export SRT
+        const srtPath = basePath + ".srt";
+        const srtResult = await CEP.exportSRT(segments, srtPath);
+        if (srtResult && srtResult.success) {
+            results.push("SRT");
+        }
+
+        // Export VTT
+        const vttPath = basePath + ".vtt";
+        const vttContent = generateVTT(segments);
+        const fs = require("fs");
+        try {
+            fs.writeFileSync(vttPath, vttContent, "utf8");
+            results.push("VTT");
+        } catch (e) {
+            console.error("[CutOne] VTT export failed:", e);
+        }
+
+        return {
+            success: true,
+            formats: results,
+            basePath: basePath
+        };
+    }
+
+    function loadCompletionSoundOption() {
+        const toggle = document.getElementById("completionSoundToggle");
+        if (toggle) {
+            const saved = localStorage.getItem("cutone_completion_sound");
+            toggle.checked = saved === "true";
+        }
+    }
+
+    // ============================================
+    // Processing History
+    // ============================================
+    const processingHistory = [];
+    const MAX_HISTORY_ITEMS = 10;
+
+    function addToHistory(operation) {
+        processingHistory.unshift({
+            ...operation,
+            timestamp: Date.now(),
+            id: Date.now().toString()
+        });
+
+        // Keep only last N items
+        if (processingHistory.length > MAX_HISTORY_ITEMS) {
+            processingHistory.pop();
+        }
+
+        updateHistoryDisplay();
+        saveHistoryToStorage();
+    }
+
+    function loadHistoryFromStorage() {
+        const saved = localStorage.getItem("cutone_processing_history");
+        if (saved) {
+            try {
+                const items = JSON.parse(saved);
+                processingHistory.length = 0;
+                processingHistory.push(...items.slice(0, MAX_HISTORY_ITEMS));
+            } catch (e) {
+                console.log("[CutOne] Failed to parse history");
+            }
+        }
+    }
+
+    function saveHistoryToStorage() {
+        localStorage.setItem("cutone_processing_history", JSON.stringify(processingHistory));
+    }
+
+    function updateHistoryDisplay() {
+        const container = document.getElementById("historyContainer");
+        if (!container) return;
+
+        if (processingHistory.length === 0) {
+            container.innerHTML = '<div class="history-empty">履歴がありません</div>';
+            return;
+        }
+
+        container.innerHTML = processingHistory.map(item => {
+            const date = new Date(item.timestamp);
+            const timeStr = `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+            const statusClass = item.success ? 'success' : 'error';
+            const statusIcon = item.success
+                ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>'
+                : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+            return `
+                <div class="history-item ${statusClass}">
+                    <div class="history-icon">${statusIcon}</div>
+                    <div class="history-content">
+                        <div class="history-title">${item.type}</div>
+                        <div class="history-details">${item.details || ''}</div>
+                    </div>
+                    <div class="history-time">${timeStr}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function clearHistory() {
+        processingHistory.length = 0;
+        localStorage.removeItem("cutone_processing_history");
+        updateHistoryDisplay();
+        showToast("履歴をクリアしました", "info");
+    }
+
+    // ============================================
+    // Settings Reset
+    // ============================================
+    function resetAllSettings() {
+        // Default values
+        const defaults = {
+            threshold: -35,
+            minSilenceDuration: 500,
+            minTalkDuration: 300,
+            paddingBefore: 100,
+            paddingAfter: 100
+        };
+
+        // Reset sliders
+        elements.thresholdSlider.value = defaults.threshold;
+        elements.minSilenceDuration.value = defaults.minSilenceDuration;
+        elements.minTalkDuration.value = defaults.minTalkDuration;
+        elements.paddingBefore.value = defaults.paddingBefore;
+        elements.paddingAfter.value = defaults.paddingAfter;
+
+        // Update displays
+        updateSliderDisplays();
+
+        // Reset presets
+        document.querySelectorAll(".preset-btn").forEach(btn => btn.classList.remove("active"));
+
+        // Reset checkboxes
+        elements.addToSequence.checked = true;
+        elements.exportSrt.checked = true;
+        if (elements.exportVtt) elements.exportVtt.checked = false;
+
+        // Save
+        saveOutputOptions();
+
+        showToast("設定をリセットしました", "success");
+    }
+
+    // ============================================
+    // Segment Merge
+    // ============================================
+    function mergeSelectedSegments() {
+        const selectedIndices = getSelectedSegmentIndices();
+        if (selectedIndices.length < 2) {
+            showToast("マージするには2つ以上のセグメントを選択してください", "info");
+            return;
+        }
+
+        // Sort indices
+        selectedIndices.sort((a, b) => a - b);
+
+        // Check if consecutive
+        for (let i = 1; i < selectedIndices.length; i++) {
+            if (selectedIndices[i] !== selectedIndices[i - 1] + 1) {
+                showToast("連続したセグメントのみマージできます", "error");
+                return;
+            }
+        }
+
+        // Merge segments
+        const firstIdx = selectedIndices[0];
+        const lastIdx = selectedIndices[selectedIndices.length - 1];
+        const first = transcriptionSegments[firstIdx];
+        const last = transcriptionSegments[lastIdx];
+
+        const mergedText = selectedIndices
+            .map(i => transcriptionSegments[i].text)
+            .join(' ');
+
+        const mergedSegment = {
+            start: first.start,
+            end: last.end,
+            text: mergedText
+        };
+
+        // Replace segments
+        transcriptionSegments.splice(firstIdx, selectedIndices.length, mergedSegment);
+
+        // Refresh display
+        displayTranscriptionResult(transcriptionSegments);
+        showToast(`${selectedIndices.length}個のセグメントをマージしました`, "success");
+    }
+
+    function getSelectedSegmentIndices() {
+        const selected = [];
+        document.querySelectorAll(".transcription-segment.selected").forEach(el => {
+            const index = parseInt(el.dataset.index);
+            if (!isNaN(index)) selected.push(index);
+        });
+        return selected;
+    }
+
+    // ============================================
+    // Detected Segment List (Interactive)
+    // ============================================
+    let excludedSegments = new Set(); // Track segments to exclude from processing
+
+    function renderDetectedSegmentList() {
+        const container = document.getElementById("segmentListContainer");
+        const list = document.getElementById("segmentList");
+        const countSpan = document.getElementById("segmentCount");
+
+        if (!container || !list) return;
+
+        if (detectedSegments.length === 0) {
+            container.style.display = "none";
+            return;
+        }
+
+        container.style.display = "block";
+        countSpan.textContent = detectedSegments.length;
+
+        list.innerHTML = detectedSegments.map((seg, index) => {
+            const isSelected = !excludedSegments.has(index);
+            const startTime = formatTimestamp(seg.start);
+            const endTime = formatTimestamp(seg.end);
+            const duration = (seg.end - seg.start).toFixed(2);
+
+            return `
+                <div class="segment-item ${isSelected ? 'selected' : 'excluded'}" data-index="${index}">
+                    <div class="segment-checkbox">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                    <div class="segment-info">
+                        <span class="segment-time">${startTime} → ${endTime}</span>
+                        <span class="segment-duration">${duration}秒</span>
+                    </div>
+                    <button class="segment-preview-btn" data-start="${seg.start}">再生</button>
+                </div>
+            `;
+        }).join('');
+
+        // Add click handlers
+        list.querySelectorAll(".segment-item").forEach(item => {
+            item.addEventListener("click", (e) => {
+                if (e.target.classList.contains("segment-preview-btn")) return;
+                const index = parseInt(item.dataset.index);
+                toggleSegmentSelection(index);
+            });
+        });
+
+        list.querySelectorAll(".segment-preview-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const start = parseFloat(btn.dataset.start);
+                try {
+                    await CEP.callExtendScript("setPlayerPosition", [start]);
+                } catch (err) {
+                    console.log("[CutOne] Could not set player position:", err);
+                }
+            });
+        });
+    }
+
+    function toggleSegmentSelection(index) {
+        if (excludedSegments.has(index)) {
+            excludedSegments.delete(index);
+        } else {
+            excludedSegments.add(index);
+        }
+        renderDetectedSegmentList();
+        renderPreviewWaveform(); // Re-render to show excluded segments
+    }
+
+    function selectAllSegments() {
+        excludedSegments.clear();
+        renderDetectedSegmentList();
+        renderPreviewWaveform();
+    }
+
+    function deselectAllSegments() {
+        detectedSegments.forEach((_, index) => excludedSegments.add(index));
+        renderDetectedSegmentList();
+        renderPreviewWaveform();
+    }
+
+    function getActiveSegments() {
+        return detectedSegments.filter((_, index) => !excludedSegments.has(index));
+    }
+
+    // ============================================
+    // Settings Profiles
+    // ============================================
+    const MAX_PROFILES = 5;
+
+    function getCurrentSettings() {
+        return {
+            threshold: parseInt(elements.thresholdSlider.value),
+            minSilenceDuration: parseInt(elements.minSilenceDuration.value),
+            minTalkDuration: parseInt(elements.minTalkDuration.value),
+            paddingBefore: parseInt(elements.paddingBefore.value),
+            paddingAfter: parseInt(elements.paddingAfter.value),
+            silenceAction: getSelectedSilenceAction(),
+            transition: getSelectedTransition()
+        };
+    }
+
+    function saveProfile() {
+        const profiles = loadProfiles();
+
+        if (profiles.length >= MAX_PROFILES) {
+            showToast(`最大${MAX_PROFILES}個のプロファイルまで保存できます`, "error");
+            return;
+        }
+
+        const name = prompt("プロファイル名を入力してください:");
+        if (!name || name.trim() === "") return;
+
+        const settings = getCurrentSettings();
+        const profile = {
+            id: Date.now().toString(),
+            name: name.trim(),
+            settings: settings,
+            createdAt: Date.now()
+        };
+
+        profiles.push(profile);
+        localStorage.setItem("cutone_profiles", JSON.stringify(profiles));
+        updateProfileList();
+        showToast(`プロファイル「${name}」を保存しました`, "success");
+    }
+
+    function loadProfiles() {
+        const saved = localStorage.getItem("cutone_profiles");
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                return [];
+            }
+        }
+        return [];
+    }
+
+    function applyProfile(profileId) {
+        const profiles = loadProfiles();
+        const profile = profiles.find(p => p.id === profileId);
+        if (!profile) return;
+
+        const s = profile.settings;
+        elements.thresholdSlider.value = s.threshold;
+        elements.minSilenceDuration.value = s.minSilenceDuration;
+        elements.minTalkDuration.value = s.minTalkDuration;
+        elements.paddingBefore.value = s.paddingBefore;
+        elements.paddingAfter.value = s.paddingAfter;
+
+        updateSliderDisplays();
+        showToast(`プロファイル「${profile.name}」を適用しました`, "success");
+    }
+
+    function deleteProfile(profileId) {
+        let profiles = loadProfiles();
+        profiles = profiles.filter(p => p.id !== profileId);
+        localStorage.setItem("cutone_profiles", JSON.stringify(profiles));
+        updateProfileList();
+        showToast("プロファイルを削除しました", "info");
+    }
+
+    function updateProfileList() {
+        const container = document.getElementById("profileList");
+        if (!container) return;
+
+        const profiles = loadProfiles();
+
+        if (profiles.length === 0) {
+            container.innerHTML = '<div class="profile-empty">プロファイルがありません</div>';
+            return;
+        }
+
+        container.innerHTML = profiles.map(profile => {
+            const desc = `閾値: ${profile.settings.threshold}dB, 最小無音: ${profile.settings.minSilenceDuration}ms`;
+            return `
+                <div class="profile-item" data-id="${profile.id}">
+                    <div class="profile-icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </div>
+                    <div class="profile-info">
+                        <span class="profile-name">${profile.name}</span>
+                        <span class="profile-desc">${desc}</span>
+                    </div>
+                    <button class="profile-delete" data-id="${profile.id}" title="削除">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        // Add click handlers
+        container.querySelectorAll(".profile-item").forEach(item => {
+            item.addEventListener("click", (e) => {
+                if (e.target.closest(".profile-delete")) return;
+                applyProfile(item.dataset.id);
+            });
+        });
+
+        container.querySelectorAll(".profile-delete").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (confirm("このプロファイルを削除しますか？")) {
+                    deleteProfile(btn.dataset.id);
+                }
+            });
+        });
+    }
+
+    // ============================================
+    // Statistics Dashboard
+    // ============================================
+    function loadStats() {
+        const saved = localStorage.getItem("cutone_stats");
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                return getDefaultStats();
+            }
+        }
+        return getDefaultStats();
+    }
+
+    function getDefaultStats() {
+        return {
+            totalProcessed: 0,
+            totalSavedSeconds: 0,
+            totalReductions: [],
+            totalTranscribed: 0
+        };
+    }
+
+    function saveStats(stats) {
+        localStorage.setItem("cutone_stats", JSON.stringify(stats));
+    }
+
+    function updateStatsAfterProcess(savedSeconds, reductionPercent) {
+        const stats = loadStats();
+        stats.totalProcessed++;
+        stats.totalSavedSeconds += savedSeconds;
+        stats.totalReductions.push(reductionPercent);
+        // Keep only last 100 reductions for average
+        if (stats.totalReductions.length > 100) {
+            stats.totalReductions.shift();
+        }
+        saveStats(stats);
+        updateStatsDashboard();
+    }
+
+    function updateStatsAfterTranscribe() {
+        const stats = loadStats();
+        stats.totalTranscribed++;
+        saveStats(stats);
+        updateStatsDashboard();
+    }
+
+    function updateStatsDashboard() {
+        const stats = loadStats();
+
+        const totalProcessedEl = document.getElementById("statTotalProcessed");
+        const totalSavedEl = document.getElementById("statTotalSaved");
+        const avgReductionEl = document.getElementById("statAvgReduction");
+        const totalTranscribedEl = document.getElementById("statTotalTranscribed");
+
+        if (totalProcessedEl) totalProcessedEl.textContent = stats.totalProcessed;
+        if (totalTranscribedEl) totalTranscribedEl.textContent = stats.totalTranscribed;
+
+        if (totalSavedEl) {
+            const mins = Math.floor(stats.totalSavedSeconds / 60);
+            const secs = Math.floor(stats.totalSavedSeconds % 60);
+            totalSavedEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        if (avgReductionEl) {
+            if (stats.totalReductions.length > 0) {
+                const avg = stats.totalReductions.reduce((a, b) => a + b, 0) / stats.totalReductions.length;
+                avgReductionEl.textContent = `${avg.toFixed(1)}%`;
+            } else {
+                avgReductionEl.textContent = "0%";
+            }
+        }
+    }
+
+    // ============================================
+    // Export Folder Memory
+    // ============================================
+    function saveLastExportPath(path) {
+        localStorage.setItem("cutone_last_export_path", path);
+    }
+
+    function getLastExportPath() {
+        return localStorage.getItem("cutone_last_export_path") || "";
+    }
+
+    // ============================================
+    // Waveform Hover Tooltip
+    // ============================================
+    function setupWaveformInteraction() {
+        const waveform = elements.previewWaveform;
+        if (!waveform) return;
+
+        let tooltip = null;
+
+        waveform.addEventListener("mousemove", (e) => {
+            if (!currentSequence || !waveform.querySelector("canvas")) return;
+
+            const rect = waveform.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percent = x / rect.width;
+            const time = percent * currentSequence.duration;
+
+            // Create or update tooltip
+            if (!tooltip) {
+                tooltip = document.createElement("div");
+                tooltip.className = "waveform-tooltip";
+                waveform.appendChild(tooltip);
+            }
+
+            tooltip.textContent = formatTimestamp(time);
+            tooltip.style.left = `${x + 10}px`;
+            tooltip.style.top = `${e.clientY - rect.top - 25}px`;
+            tooltip.style.display = "block";
+        });
+
+        waveform.addEventListener("mouseleave", () => {
+            if (tooltip) {
+                tooltip.style.display = "none";
+            }
+        });
+
+        waveform.addEventListener("click", async (e) => {
+            if (!currentSequence) return;
+
+            const rect = waveform.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percent = x / rect.width;
+            const time = percent * currentSequence.duration;
+
+            try {
+                await CEP.callExtendScript("setPlayerPosition", [time]);
+            } catch (err) {
+                console.log("[CutOne] Could not set player position:", err);
+            }
+        });
+    }
+
+    // ============================================
+    // Use Case Presets
+    // ============================================
+    const useCasePresets = {
+        podcast: {
+            threshold: -40,
+            minSilence: 600,
+            minTalk: 300,
+            paddingBefore: 100,
+            paddingAfter: 100,
+            pacing: "calm"
+        },
+        interview: {
+            threshold: -38,
+            minSilence: 500,
+            minTalk: 250,
+            paddingBefore: 80,
+            paddingAfter: 80,
+            pacing: "careful"
+        },
+        vlog: {
+            threshold: -32,
+            minSilence: 250,
+            minTalk: 150,
+            paddingBefore: 50,
+            paddingAfter: 50,
+            pacing: "energetic"
+        },
+        tutorial: {
+            threshold: -36,
+            minSilence: 400,
+            minTalk: 200,
+            paddingBefore: 60,
+            paddingAfter: 60,
+            pacing: "good"
+        },
+        asmr: {
+            threshold: -50,
+            minSilence: 1000,
+            minTalk: 500,
+            paddingBefore: 200,
+            paddingAfter: 200,
+            pacing: "calm"
+        }
+    };
+
+    function applyUseCasePreset(usecase) {
+        const preset = useCasePresets[usecase];
+        if (!preset) return;
+
+        // Update threshold slider
+        if (elements.thresholdSlider) {
+            elements.thresholdSlider.value = preset.threshold;
+            updateThresholdDisplay();
+        }
+
+        // Update silence duration
+        const minSilenceInput = document.getElementById("minSilenceDuration");
+        if (minSilenceInput) minSilenceInput.value = preset.minSilence;
+
+        // Update talk duration
+        const minTalkInput = document.getElementById("minTalkDuration");
+        if (minTalkInput) minTalkInput.value = preset.minTalk;
+
+        // Update padding
+        const paddingBefore = document.getElementById("paddingBefore");
+        const paddingAfter = document.getElementById("paddingAfter");
+        if (paddingBefore) paddingBefore.value = preset.paddingBefore;
+        if (paddingAfter) paddingAfter.value = preset.paddingAfter;
+
+        // Update pacing preset
+        const pacingBtn = document.querySelector(`.preset-btn[data-preset="${preset.pacing}"]`);
+        if (pacingBtn) {
+            elements.presetBtns.forEach(btn => btn.classList.remove("active"));
+            pacingBtn.classList.add("active");
+        }
+
+        // Update button states
+        document.querySelectorAll(".usecase-preset-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.usecase === usecase);
+        });
+
+        showToast(`${getUseCaseLabel(usecase)}プリセットを適用しました`, "success");
+
+        // Re-generate preview if we have audio levels
+        if (audioLevels.length > 0) {
+            generatePreview();
+        }
+    }
+
+    function getUseCaseLabel(usecase) {
+        const labels = {
+            podcast: "ポッドキャスト",
+            interview: "インタビュー",
+            vlog: "Vlog",
+            tutorial: "チュートリアル",
+            asmr: "ASMR"
+        };
+        return labels[usecase] || usecase;
+    }
+
+    // ============================================
+    // Auto Threshold Detection
+    // ============================================
+    function autoDetectThreshold() {
+        if (audioLevels.length === 0) {
+            showToast("先にプレビューを生成してください", "info");
+            return;
+        }
+
+        // Convert levels to dB values
+        const dbLevels = audioLevels.map(level => {
+            if (level <= 0) return -60;
+            return 20 * Math.log10(level);
+        });
+
+        // Sort levels to find distribution
+        const sorted = [...dbLevels].sort((a, b) => a - b);
+
+        // Find the 10th percentile (likely silence) and 50th percentile (likely speech)
+        const silencePercentile = Math.floor(sorted.length * 0.1);
+        const speechPercentile = Math.floor(sorted.length * 0.5);
+
+        const silenceLevel = sorted[silencePercentile];
+        const speechLevel = sorted[speechPercentile];
+
+        // Calculate optimal threshold (midpoint between silence and speech)
+        let optimalThreshold = (silenceLevel + speechLevel) / 2;
+
+        // Clamp to valid range
+        optimalThreshold = Math.max(-60, Math.min(-20, Math.round(optimalThreshold)));
+
+        // Apply threshold
+        if (elements.thresholdSlider) {
+            elements.thresholdSlider.value = optimalThreshold;
+            updateThresholdDisplay();
+        }
+
+        showToast(`閾値を自動検出: ${optimalThreshold}dB`, "success");
+
+        // Re-generate preview
+        generatePreview();
+    }
+
+    // ============================================
+    // Copy Result to Clipboard
+    // ============================================
+    function copyResultToClipboard() {
+        const statsData = loadStats();
+        const result = lastProcessingResult || {};
+
+        const text = `CutOne 処理結果
+━━━━━━━━━━━━━━━━━━━━
+シーケンス: ${currentSequence?.name || "N/A"}
+元の長さ: ${result.originalDuration ? formatTime(result.originalDuration) : "N/A"}
+処理後: ${result.newDuration ? formatTime(result.newDuration) : "N/A"}
+削減率: ${result.savedPercent ? result.savedPercent.toFixed(1) + "%" : "N/A"}
+検出セグメント: ${detectedSegments.length}箇所
+━━━━━━━━━━━━━━━━━━━━
+累計処理回数: ${statsData.totalProcessed}
+累計短縮時間: ${formatTime(statsData.totalSavedSeconds)}`;
+
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("結果をクリップボードにコピーしました", "success");
+        }).catch(() => {
+            showToast("コピーに失敗しました", "error");
+        });
+    }
+
+    // ============================================
+    // Play Segment Preview in Premiere
+    // ============================================
+    async function playSegmentPreview(startTime, endTime) {
+        try {
+            // Jump to start time
+            await CEP.callExtendScript("setPlayerPosition", [startTime]);
+
+            // TODO: In future, could implement play-and-pause using QE API
+            showToast(`${formatTimestamp(startTime)} へジャンプしました`, "info");
+        } catch (err) {
+            console.error("[CutOne] Play preview error:", err);
+            showToast("再生に失敗しました", "error");
+        }
+    }
+
+    // ============================================
+    // Segment Split
+    // ============================================
+    function showSplitDialog(segmentIndex) {
+        const segment = transcriptionSegments[segmentIndex];
+        if (!segment) return;
+
+        const midpoint = (segment.start + segment.end) / 2;
+
+        const dialog = document.createElement("div");
+        dialog.className = "split-dialog-overlay";
+        dialog.innerHTML = `
+            <div class="split-dialog">
+                <h3>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    セグメント分割
+                </h3>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                    分割位置を入力してください (${formatTimestamp(segment.start)} - ${formatTimestamp(segment.end)})
+                </p>
+                <div class="split-time-input">
+                    <input type="text" id="splitTimeInput" value="${formatTimestamp(midpoint)}" placeholder="0:00.00">
+                </div>
+                <div class="split-dialog-actions">
+                    <button class="btn-secondary" id="splitCancel">キャンセル</button>
+                    <button class="btn-primary" id="splitConfirm">分割</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        requestAnimationFrame(() => {
+            dialog.classList.add("visible");
+        });
+
+        const closeDialog = () => {
+            dialog.classList.remove("visible");
+            setTimeout(() => dialog.remove(), 200);
+        };
+
+        document.getElementById("splitCancel").addEventListener("click", closeDialog);
+
+        document.getElementById("splitConfirm").addEventListener("click", () => {
+            const timeInput = document.getElementById("splitTimeInput").value;
+            const splitTime = parseTimestamp(timeInput);
+
+            if (splitTime <= segment.start || splitTime >= segment.end) {
+                showToast("分割位置はセグメント内である必要があります", "error");
+                return;
+            }
+
+            // Split the segment
+            const firstHalf = {
+                start: segment.start,
+                end: splitTime,
+                text: segment.text.substring(0, Math.floor(segment.text.length / 2))
+            };
+
+            const secondHalf = {
+                start: splitTime,
+                end: segment.end,
+                text: segment.text.substring(Math.floor(segment.text.length / 2))
+            };
+
+            transcriptionSegments.splice(segmentIndex, 1, firstHalf, secondHalf);
+            displayTranscriptionResult(transcriptionSegments);
+            showToast("セグメントを分割しました", "success");
+            closeDialog();
+        });
+    }
+
+    function parseTimestamp(str) {
+        // Parse formats like "0:00.00", "00:00", "1:23.45"
+        const parts = str.split(":");
+        if (parts.length === 2) {
+            const mins = parseInt(parts[0]);
+            const secs = parseFloat(parts[1]);
+            return mins * 60 + secs;
+        }
+        return parseFloat(str) || 0;
+    }
+
+    let lastProcessingResult = null;
+
+    // ============================================
+    // Retry on Error
+    // ============================================
+    let lastFailedOperation = null;
+
+    function saveFailedOperation(operation, params) {
+        lastFailedOperation = { operation, params, timestamp: Date.now() };
+        showRetryButton(operation);
+    }
+
+    function showRetryButton(operationType) {
+        // Remove any existing retry container
+        hideRetryButton();
+
+        const retryContainer = document.createElement("div");
+        retryContainer.id = "retryContainer";
+        retryContainer.className = "retry-container";
+        retryContainer.innerHTML = `
+            <span class="retry-message">処理に失敗しました。もう一度試しますか？</span>
+            <button class="btn-retry" id="retryBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                リトライ
+            </button>
+        `;
+
+        // Find a suitable place to insert the retry container
+        const resultsSection = document.getElementById("resultsSection");
+        if (resultsSection && !resultsSection.classList.contains("hidden")) {
+            resultsSection.appendChild(retryContainer);
+        } else {
+            // Try inserting in the processing log area or main content
+            const logContainer = document.getElementById("processingLogContainer");
+            if (logContainer) {
+                logContainer.parentNode.insertBefore(retryContainer, logContainer.nextSibling);
+            }
+        }
+
+        // Add click handler
+        document.getElementById("retryBtn").addEventListener("click", async () => {
+            hideRetryButton();
+            await retryLastOperation();
+        });
+    }
+
+    function hideRetryButton() {
+        const existing = document.getElementById("retryContainer");
+        if (existing) {
+            existing.remove();
+        }
+    }
+
+    async function retryLastOperation() {
+        if (!lastFailedOperation) {
+            showToast("リトライする操作がありません", "info");
+            return;
+        }
+
+        const { operation } = lastFailedOperation;
+        lastFailedOperation = null;
+        hideRetryButton();
+
+        showToast("リトライ中...", "info");
+
+        try {
+            switch (operation) {
+                case "transcribe":
+                    await startTranscription();
+                    break;
+                case "silenceCut":
+                    await processSequence(true);
+                    break;
+                case "apply":
+                    await applyTranscription();
+                    break;
+                default:
+                    showToast("リトライできない操作です", "error");
+            }
+        } catch (e) {
+            showToast(`リトライ失敗: ${e.message}`, "error");
+        }
+    }
+
+    // ============================================
+    // Progress Stages
+    // ============================================
+    const progressStages = [
+        { id: "analyze", label: "音声分析", percent: 0 },
+        { id: "detect", label: "無音検出", percent: 25 },
+        { id: "process", label: "クリップ処理", percent: 50 },
+        { id: "finalize", label: "完了処理", percent: 90 }
+    ];
+
+    function updateProgressStage(stageId, percent) {
+        const stageIndicator = document.getElementById("progressStageIndicator");
+        if (!stageIndicator) return;
+
+        const stage = progressStages.find(s => s.id === stageId);
+        if (!stage) return;
+
+        // Update stage display
+        stageIndicator.innerHTML = progressStages.map(s => {
+            const isActive = s.id === stageId;
+            const isComplete = progressStages.indexOf(s) < progressStages.indexOf(stage);
+            const stateClass = isComplete ? 'complete' : (isActive ? 'active' : '');
+
+            return `
+                <div class="progress-stage ${stateClass}">
+                    <div class="stage-dot"></div>
+                    <span class="stage-label">${s.label}</span>
+                </div>
+            `;
+        }).join('<div class="stage-connector"></div>');
+    }
+
+    function loadFillerRemovalOption() {
+        const toggle = document.getElementById("removeFillerToggle");
+        if (toggle) {
+            const saved = localStorage.getItem("cutone_remove_filler");
+            toggle.checked = saved === "true";
+        }
+
+        // Restore LLM post-processing settings
+        const llmToggle = document.getElementById("enableLLMPostProcess");
+        const llmModelSection = document.getElementById("llmModelSection");
+        if (llmToggle) {
+            const savedLLM = localStorage.getItem("cutone_enable_llm");
+            // Default to enabled if not set
+            llmToggle.checked = savedLLM === null ? true : savedLLM === "true";
+            if (llmModelSection) {
+                llmModelSection.style.display = llmToggle.checked ? "block" : "none";
+            }
+        }
+
+        // Restore LLM model selection
+        const savedModel = localStorage.getItem("cutone_llm_model");
+        if (savedModel) {
+            const modelRadio = document.querySelector(`input[name="llmModel"][value="${savedModel}"]`);
+            if (modelRadio) {
+                modelRadio.checked = true;
+            }
+        }
+    }
+
+    function isCompletionSoundEnabled() {
+        return localStorage.getItem("cutone_completion_sound") === "true";
+    }
+
+    function isFillerRemovalEnabled() {
+        return localStorage.getItem("cutone_remove_filler") === "true";
+    }
+
+    function playCompletionSound() {
+        if (!isCompletionSoundEnabled()) return;
+        try {
+            // Use Web Audio API for a simple completion chime
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
+            oscillator.frequency.setValueAtTime(1200, audioContext.currentTime + 0.2);
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.4);
+        } catch (e) {
+            console.log("[CutOne] Could not play completion sound:", e);
+        }
+    }
+
+    function removeFillerWords(text) {
+        if (!isFillerRemovalEnabled()) return text;
+        // Common Japanese filler words
+        const fillers = [
+            /えー+と?/g,
+            /あー+/g,
+            /うー+ん?/g,
+            /んー+/g,
+            /あのー?/g,
+            /そのー?/g,
+            /えっと/g,
+            /まあ/g,
+            /なんか/g
+        ];
+        let result = text;
+        for (const filler of fillers) {
+            result = result.replace(filler, "");
+        }
+        // Clean up extra spaces
+        return result.replace(/\s+/g, " ").trim();
+    }
+
+    function loadSavedLanguage() {
+        const savedLang = localStorage.getItem("cutone_transcription_language");
+        if (savedLang) {
+            const radio = document.querySelector(`input[name="transcriptionLang"][value="${savedLang}"]`);
+            if (radio) {
+                radio.checked = true;
+            }
+        }
+    }
+
+    function saveLanguage(lang) {
+        localStorage.setItem("cutone_transcription_language", lang);
+    }
+
     function getSelectedTranscriptionLanguage() {
         const selected = document.querySelector('input[name="transcriptionLang"]:checked');
-        return selected ? selected.value : "ja";
+        const lang = selected ? selected.value : "ja";
+        saveLanguage(lang);
+        return lang;
+    }
+
+    // Quick transcription: starts immediately and auto-applies
+    async function quickTranscribe() {
+        const apiKey = elements.openaiApiKey.value.trim();
+        if (!apiKey || !apiKey.startsWith("sk-") || apiKey.length <= 20) {
+            showToast("まず有効なAPIキーを入力してください", "error");
+            elements.openaiApiKey.focus();
+            return;
+        }
+
+        // Start transcription
+        await startTranscription();
+
+        // Auto-apply after transcription completes (if successful)
+        if (transcriptionSegments.length > 0) {
+            await applyTranscription();
+        }
     }
 
     async function startTranscription() {
@@ -450,30 +2491,105 @@
         isTranscribing = true;
 
         try {
-            showLoading("文字起こしを開始中...");
+            showLoading("文字起こしを開始中...", {
+                showProgress: true,
+                cancellable: true,
+                onCancel: () => {
+                    console.log("[CutOne] Transcription cancelled by user");
+                }
+            });
+
+            // Get custom prompt from textarea
+            const customPromptEl = document.getElementById("customPrompt");
+            const customPrompt = customPromptEl ? customPromptEl.value.trim() : "";
+
+            // Get LLM post-processing options
+            const enableLLMPostProcess = document.getElementById("enableLLMPostProcess")?.checked ?? true;
+            const llmModelEl = document.querySelector('input[name="llmModel"]:checked');
+            const llmModel = llmModelEl ? llmModelEl.value : "gpt-5.2";
+            const useBatchAPI = document.getElementById("useBatchAPI")?.checked ?? true;
+
+            // Get subtitle format options (number inputs)
+            const maxCharsPerSegment = parseInt(document.getElementById("maxCharsPerSegment")?.value || "18", 10);
+            const maxLinesPerSegment = parseInt(document.getElementById("maxLinesPerSegment")?.value || "2", 10);
 
             const options = {
                 apiKey: apiKey,
-                language: getSelectedTranscriptionLanguage()
+                language: getSelectedTranscriptionLanguage(),
+                customPrompt: customPrompt,
+                enableLLMPostProcess: enableLLMPostProcess,
+                llmModel: llmModel,
+                useBatchAPI: useBatchAPI,
+                subtitleFormat: {
+                    maxCharsPerSegment: maxCharsPerSegment,
+                    maxLinesPerSegment: maxLinesPerSegment
+                }
             };
 
             const result = await CEP.transcribeAudio(options, (message, percent) => {
+                if (isCancelRequested()) {
+                    throw new Error("キャンセルされました");
+                }
                 updateLoadingText(message);
+                if (percent !== undefined) {
+                    updateLoadingProgress(percent);
+                }
             });
+
+            if (isCancelRequested()) {
+                hideLoading();
+                showToast("文字起こしをキャンセルしました", "info");
+                return;
+            }
 
             hideLoading();
 
             if (result && result.success) {
-                transcriptionSegments = result.segments;
-                displayTranscriptionResult(result.segments);
+                // Apply filler word removal if enabled
+                transcriptionSegments = result.segments.map(seg => ({
+                    ...seg,
+                    text: removeFillerWords(seg.text)
+                }));
+                displayTranscriptionResult(transcriptionSegments);
                 showToast(`${result.segments.length}セグメントの文字起こしが完了しました`, "success");
+                // Play completion sound
+                playCompletionSound();
+                // Update statistics
+                updateStatsAfterTranscribe();
+                // Add to history
+                addToHistory({
+                    type: "文字起こし",
+                    details: `${result.segments.length}セグメント`,
+                    success: true
+                });
             } else {
                 showToast(result?.error || "文字起こしに失敗しました", "error");
+                addToHistory({
+                    type: "文字起こし",
+                    details: result?.error || "文字起こしに失敗しました",
+                    success: false
+                });
+                saveFailedOperation("transcribe", {});
             }
         } catch (e) {
             hideLoading();
-            showToast(e.message || "文字起こしに失敗しました", "error");
-            console.error("[CutOne] Transcription error:", e);
+            if (e.message === "キャンセルされました") {
+                showToast("文字起こしをキャンセルしました", "info");
+                addToHistory({
+                    type: "文字起こし",
+                    details: "キャンセル",
+                    success: true
+                });
+            } else {
+                showToast(e.message || "文字起こしに失敗しました", "error");
+                console.error("[CutOne] Transcription error:", e);
+                addToHistory({
+                    type: "文字起こし",
+                    details: e.message || "エラー",
+                    success: false
+                });
+                saveFailedOperation("transcribe", {});
+            }
         } finally {
             isTranscribing = false;
         }
@@ -483,19 +2599,41 @@
         // Show preview section
         elements.transcriptionPreviewSection.style.display = "block";
 
-        // Render segments
+        // Render segments with inline editing
         let html = "";
         let totalChars = 0;
 
-        segments.forEach((seg) => {
+        segments.forEach((seg, index) => {
             const startTime = formatTimestamp(seg.start);
             const endTime = formatTimestamp(seg.end);
             totalChars += seg.text.length;
 
             html += `
-                <div class="transcription-segment">
-                    <div class="transcription-segment-time">${startTime} → ${endTime}</div>
-                    <div class="transcription-segment-text">${escapeHtml(seg.text)}</div>
+                <div class="transcription-segment" data-index="${index}">
+                    <div class="transcription-segment-header">
+                        <div class="transcription-segment-time">
+                            <span class="time-badge">${startTime}</span>
+                            <span class="time-arrow">→</span>
+                            <span class="time-badge">${endTime}</span>
+                        </div>
+                        <div class="segment-actions">
+                            <button class="segment-action-mini" data-action="split" data-index="${index}" title="セグメントを分割">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <polyline points="19 12 12 19 5 12"/>
+                                </svg>
+                            </button>
+                            <button class="segment-jump-btn" data-time="${seg.start}" data-end="${seg.end}" title="この位置にジャンプ">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="transcription-segment-text"
+                         contenteditable="true"
+                         data-index="${index}"
+                         spellcheck="false">${escapeHtml(seg.text)}</div>
                 </div>
             `;
         });
@@ -504,9 +2642,64 @@
         elements.transcriptionSegmentCount.textContent = segments.length;
         elements.transcriptionCharCount.textContent = totalChars;
 
+        // Add event listeners for inline editing
+        elements.transcriptionResult.querySelectorAll(".transcription-segment-text").forEach(el => {
+            el.addEventListener("blur", handleSegmentEdit);
+            el.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    el.blur();
+                }
+            });
+        });
+
+        // Add event listeners for jump buttons
+        elements.transcriptionResult.querySelectorAll(".segment-jump-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const startTime = parseFloat(btn.dataset.time);
+                const endTime = parseFloat(btn.dataset.end);
+                playSegmentPreview(startTime, endTime);
+            });
+        });
+
+        // Add event listeners for split buttons
+        elements.transcriptionResult.querySelectorAll(".segment-action-mini[data-action='split']").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const index = parseInt(btn.dataset.index);
+                showSplitDialog(index);
+            });
+        });
+
         // Show result actions, hide start button
         elements.startTranscriptionBtn.parentElement.style.display = "none";
         elements.transcriptionResultActions.style.display = "flex";
+    }
+
+    function handleSegmentEdit(e) {
+        const index = parseInt(e.target.dataset.index);
+        const newText = e.target.textContent.trim();
+
+        if (transcriptionSegments[index] && transcriptionSegments[index].text !== newText) {
+            transcriptionSegments[index].text = newText;
+            updateTranscriptionStats();
+            console.log(`[CutOne] Segment ${index} updated:`, newText);
+        }
+    }
+
+    function updateTranscriptionStats() {
+        let totalChars = 0;
+        transcriptionSegments.forEach(seg => {
+            totalChars += seg.text.length;
+        });
+        elements.transcriptionCharCount.textContent = totalChars;
+    }
+
+    async function jumpToTime(seconds) {
+        try {
+            await CEP.callExtendScript("setPlayerPosition", [seconds]);
+        } catch (e) {
+            console.error("[CutOne] Jump to time failed:", e);
+        }
     }
 
     function formatTimestamp(seconds) {
@@ -549,70 +2742,89 @@
 
             let results = [];
 
-            // Get project folder path for SRT export
-            const sequenceResult = await CEP.callExtendScript("getSequenceInfo", []);
-            let srtPath = "";
-
-            if (sequenceResult && sequenceResult.projectPath) {
-                const projectDir = sequenceResult.projectPath.replace(/[^/\\]+$/, "");
-                srtPath = projectDir + currentSequence.name + "_captions.srt";
-            } else {
-                // Fallback to temp directory
-                const os = require("os");
-                srtPath = os.tmpdir() + "/" + (currentSequence?.name || "captions") + ".srt";
-            }
-
-            // Always export SRT first
-            const srtResult = await CEP.exportSRT(transcriptionSegments, srtPath);
-
-            if (!srtResult || !srtResult.success) {
-                hideLoading();
-                showToast("SRTファイルの保存に失敗しました", "error");
-                return;
-            }
-
-            // Add to sequence as captions
+            // Add to sequence as captions/markers
             if (addToSeq) {
-                // Import SRT into project
-                const importResult = await CEP.callExtendScript("importSRTCaptions", [srtPath]);
-                console.log("[CutOne] importSRTCaptions result:", JSON.stringify(importResult, null, 2));
+                const addResult = await CEP.addCaptionsToSequence(transcriptionSegments);
+                console.log("[CutOne] addCaptionsToSequence result:", JSON.stringify(addResult, null, 2));
 
-                if (importResult && importResult.success) {
-                    if (importResult.addedToSequence) {
-                        results.push(`字幕トラックに追加しました`);
-                    } else {
-                        results.push(`SRTをプロジェクトにインポートしました`);
-                        // Open Finder to show the SRT file
-                        try {
-                            const { exec } = require("child_process");
-                            exec(`open -R "${srtPath}"`);
-                        } catch (e) {
-                            console.log("[CutOne] Could not open Finder:", e);
-                        }
-                        results.push(`「キャプション」パネルにドラッグして追加してください`);
+                if (addResult && addResult.success) {
+                    // Show which method was used
+                    switch (addResult.method) {
+                        case "captionTrack":
+                            results.push(`${addResult.count}個の字幕を追加しました`);
+                            break;
+                        case "graphicsText":
+                            results.push(`${addResult.count}個のテキストを追加しました`);
+                            break;
+                        case "srtImport":
+                            results.push("SRTファイルをプロジェクトにインポートしました");
+                            results.push("字幕トラックにドラッグして使用してください");
+                            break;
+                        case "markers":
+                        default:
+                            results.push(`${addResult.count}個のマーカーを追加`);
+                            results.push("（SRTファイルを手動でインポートすると字幕になります）");
+                            break;
                     }
-                } else {
-                    results.push(`SRTをエクスポートしました: ${srtPath}`);
-                    // Open Finder to show the SRT file
-                    try {
-                        const { exec } = require("child_process");
-                        exec(`open -R "${srtPath}"`);
-                    } catch (e) {
-                        console.log("[CutOne] Could not open Finder:", e);
-                    }
-                    results.push(`Finderで開きました。シーケンスにドラッグして追加してください`);
+                } else if (addResult && addResult.error) {
+                    results.push(`エラー: ${addResult.error}`);
                 }
             }
 
-            // Export SRT file notification
-            if (exportSrt && !addToSeq) {
-                results.push(`SRTファイルを保存: ${srtPath}`);
-                // Open Finder to show the SRT file
-                try {
-                    const { exec } = require("child_process");
-                    exec(`open -R "${srtPath}"`);
-                } catch (e) {
-                    console.log("[CutOne] Could not open Finder:", e);
+            // Export SRT file
+            if (exportSrt) {
+                // Get project folder path for default location
+                const sequenceResult = await CEP.callExtendScript("getSequenceInfo", []);
+                let defaultPath = getLastExportPath(); // Use saved export path
+                const defaultName = currentSequence?.name || "captions";
+
+                // Fallback to project path if no saved export path
+                if (!defaultPath && sequenceResult && sequenceResult.projectPath) {
+                    defaultPath = sequenceResult.projectPath.replace(/[^/\\]+$/, "");
+                }
+
+                // Show save dialog to let user choose location and filename
+                const dialogResult = await CEP.callExtendScript("showSaveDialog", [defaultName, defaultPath]);
+
+                if (dialogResult && dialogResult.success && dialogResult.path) {
+                    const srtPath = dialogResult.path;
+                    // Save export directory for next time
+                    saveLastExportPath(srtPath.replace(/[^/\\]+$/, ""));
+                    const srtResult = await CEP.exportSRT(transcriptionSegments, srtPath);
+                    if (srtResult && srtResult.success) {
+                        results.push(`SRTファイルを保存しました`);
+                    }
+                } else if (dialogResult && dialogResult.cancelled) {
+                    // User cancelled, skip SRT export silently
+                    console.log("[CutOne] SRT export cancelled by user");
+                }
+            }
+
+            // Export VTT file
+            const exportVtt = elements.exportVtt ? elements.exportVtt.checked : false;
+            if (exportVtt) {
+                const sequenceResult = await CEP.callExtendScript("getSequenceInfo", []);
+                let defaultPath = getLastExportPath(); // Use saved export path
+                const defaultName = (currentSequence?.name || "captions") + ".vtt";
+
+                // Fallback to project path if no saved export path
+                if (!defaultPath && sequenceResult && sequenceResult.projectPath) {
+                    defaultPath = sequenceResult.projectPath.replace(/[^/\\]+$/, "");
+                }
+
+                // Show save dialog for VTT
+                const dialogResult = await CEP.callExtendScript("showSaveDialogVTT", [defaultName, defaultPath]);
+
+                if (dialogResult && dialogResult.success && dialogResult.path) {
+                    // Save export directory for next time
+                    saveLastExportPath(dialogResult.path.replace(/[^/\\]+$/, ""));
+                    const vttContent = generateVTT(transcriptionSegments);
+                    const vttResult = await CEP.callExtendScript("writeTextFile", [dialogResult.path, vttContent]);
+                    if (vttResult && vttResult.success) {
+                        results.push(`VTTファイルを保存しました`);
+                    }
+                } else if (dialogResult && dialogResult.cancelled) {
+                    console.log("[CutOne] VTT export cancelled by user");
                 }
             }
 
@@ -620,6 +2832,12 @@
 
             if (results.length > 0) {
                 showToast(results.join("、"), "success");
+                // Add to history
+                addToHistory({
+                    type: "字幕適用",
+                    details: results[0],
+                    success: true
+                });
             } else {
                 showToast("出力オプションを選択してください", "info");
             }
@@ -628,6 +2846,12 @@
             hideLoading();
             showToast(e.message || "適用に失敗しました", "error");
             console.error("[CutOne] Apply error:", e);
+            addToHistory({
+                type: "字幕適用",
+                details: e.message || "適用に失敗しました",
+                success: false
+            });
+            saveFailedOperation("apply", {});
         }
     }
 
@@ -797,6 +3021,10 @@
                 // Render waveform with detected segments
                 renderPreviewWaveform();
 
+                // Clear excluded segments and render segment list
+                excludedSegments.clear();
+                renderDetectedSegmentList();
+
                 hideLoading();
 
                 if (result.count > 0) {
@@ -807,6 +3035,9 @@
             } else {
                 hideLoading();
                 showToast(I18n.t("msg.noSilence"), "info");
+                // Hide segment list when no segments found
+                const container = document.getElementById("segmentListContainer");
+                if (container) container.style.display = "none";
             }
         } catch (e) {
             hideLoading();
@@ -873,16 +3104,21 @@
         ctx.setLineDash([]);
 
         // Draw silence segments (delete regions)
-        ctx.fillStyle = "rgba(239, 68, 68, 0.3)"; // Red for delete
-        for (const seg of detectedSegments) {
+        // Active segments: red, Excluded segments: gray
+        for (let i = 0; i < detectedSegments.length; i++) {
+            const seg = detectedSegments[i];
+            const isExcluded = excludedSegments.has(i);
+            ctx.fillStyle = isExcluded ? "rgba(156, 163, 175, 0.3)" : "rgba(239, 68, 68, 0.3)";
             const startX = (seg.start / duration) * width;
             const endX = (seg.end / duration) * width;
             ctx.fillRect(startX, 0, endX - startX, height);
         }
 
-        // Draw margin regions (green)
+        // Draw margin regions (green) - only for active segments
         ctx.fillStyle = "rgba(16, 185, 129, 0.4)"; // Green for margin
-        for (const seg of detectedSegments) {
+        for (let i = 0; i < detectedSegments.length; i++) {
+            if (excludedSegments.has(i)) continue; // Skip excluded segments
+            const seg = detectedSegments[i];
             // Before padding
             const beforeStartX = (seg.start / duration) * width;
             const beforeEndX = ((seg.start + paddingBefore) / duration) * width;
@@ -948,7 +3184,9 @@
 
         const duration = currentSequence.duration;
 
-        for (const seg of detectedSegments) {
+        for (let i = 0; i < detectedSegments.length; i++) {
+            const seg = detectedSegments[i];
+            const isExcluded = excludedSegments.has(i);
             const startPercent = (seg.start / duration) * 100;
             const widthPercent = (seg.duration / duration) * 100;
 
@@ -958,7 +3196,7 @@
                 left: ${startPercent}%;
                 width: ${widthPercent}%;
                 height: 100%;
-                background: rgba(239, 68, 68, 0.6);
+                background: ${isExcluded ? "rgba(156, 163, 175, 0.4)" : "rgba(239, 68, 68, 0.6)"};
                 border-radius: 2px;
             `;
             markersContainer.appendChild(marker);
@@ -1123,9 +3361,6 @@
     async function refreshSequenceInfo() {
         console.log("[CutOne] Refreshing sequence info...");
 
-        // DEBUG: Show that we're trying to get sequence
-        elements.sequenceName.textContent = "取得中...";
-
         try {
             const result = await CEP.getActiveSequence();
             console.log("[CutOne] getActiveSequence result:", result);
@@ -1137,16 +3372,13 @@
                 console.log("[CutOne] Sequence loaded:", result.name, result.durationFormatted);
             } else {
                 currentSequence = null;
-                // DEBUG: Show actual result
-                elements.sequenceName.textContent = "結果: " + JSON.stringify(result);
+                elements.sequenceName.textContent = I18n.t("main.noSequence");
                 elements.sequenceDuration.textContent = "--:--";
                 console.log("[CutOne] No sequence found or error:", result);
             }
         } catch (e) {
             currentSequence = null;
-            // DEBUG: Show actual error
-            const errorMsg = e.message || e.toString() || "unknown";
-            elements.sequenceName.textContent = "エラー: " + errorMsg;
+            elements.sequenceName.textContent = I18n.t("main.noSequence");
             elements.sequenceDuration.textContent = "--:--";
             console.error("[CutOne] Error getting sequence:", e);
         }
@@ -1158,7 +3390,7 @@
     // ============================================
     // Processing - Full Implementation
     // ============================================
-    async function processSequence() {
+    async function processSequence(skipConfirmation = false) {
         console.log("[CutOne] processSequence called");
 
         // CRITICAL: Prevent multiple concurrent calls
@@ -1168,6 +3400,13 @@
         }
         isProcessing = true;
         console.log("[CutOne] isProcessing set to true");
+
+        // Save settings for next time
+        saveLastUsedSettings();
+
+        // Clear and start processing log
+        clearProcessingLogs();
+        addProcessingLog("処理を開始しました", "info");
 
         console.log("[CutOne] currentSequence:", currentSequence);
 
@@ -1198,16 +3437,46 @@
             sectionType: selectedSectionType
         };
 
+        // Show confirmation dialog if we have detected segments and skipConfirmation is false
+        const activeSegments = getActiveSegments();
+        if (!skipConfirmation && activeSegments.length > 0) {
+            isProcessing = false; // Allow dialog interaction
+            const excludedCount = excludedSegments.size;
+            const confirmed = await showConfirmationDialog(options, activeSegments, excludedCount);
+            if (!confirmed) {
+                showToast("処理をキャンセルしました", "info");
+                return;
+            }
+            isProcessing = true; // Resume processing guard
+        }
+
         console.log("[CutOne] Processing options:", options);
 
         try {
             showLoading(I18n.t("process.processing"));
             console.log("[CutOne] Calling CEP.processWithOptions...");
 
+            addProcessingLog(`閾値: ${options.threshold}dB, 最小無音: ${options.minSilenceDuration}s`, "info");
+
+            // Initialize progress stage display
+            updateProgressStage("analyze", 0);
+
             // Use the new processWithOptions function with progress callback
             const result = await CEP.processWithOptions(options, (stage, percent, remaining, message) => {
                 updateLoadingText(message);
+                addProcessingLog(message, "info");
                 console.log(`[CutOne] Progress: ${stage} ${percent}% - ${message}`);
+
+                // Map stage names to progress stage IDs
+                let stageId = "analyze";
+                if (stage === "detecting" || message.includes("検出")) {
+                    stageId = "detect";
+                } else if (stage === "processing" || message.includes("処理") || message.includes("クリップ")) {
+                    stageId = "process";
+                } else if (stage === "finalizing" || message.includes("完了") || percent >= 90) {
+                    stageId = "finalize";
+                }
+                updateProgressStage(stageId, percent);
             });
 
             hideLoading();
@@ -1215,12 +3484,17 @@
             console.log("[CutOne] isProcessing set to false (success)");
 
             if (result && result.success) {
-                // Show results
-                showResults({
+                addProcessingLog(`処理完了: ${result.segmentsProcessed}箇所を処理`, "success");
+
+                // Save result for clipboard copy
+                lastProcessingResult = {
                     originalDuration: result.originalDuration,
                     newDuration: result.newDuration,
                     savedPercent: result.savedPercent
-                });
+                };
+
+                // Show results
+                showResults(lastProcessingResult);
 
                 // Show appropriate message based on action
                 let message;
@@ -1239,21 +3513,63 @@
                 }
 
                 showToast(message, "success");
+                // Play completion sound
+                playCompletionSound();
+                // Save operation state for undo reference
+                saveOperationState("silenceCut", {
+                    segmentsProcessed: result.segmentsProcessed,
+                    savedPercent: result.savedPercent
+                });
+                // Add to processing history
+                addToHistory({
+                    type: "無音カット",
+                    details: `${result.segmentsProcessed}箇所処理 / ${result.savedPercent.toFixed(1)}%短縮`,
+                    success: true
+                });
+                // Update statistics
+                const savedSeconds = (result.originalDuration || 0) - (result.newDuration || 0);
+                updateStatsAfterProcess(savedSeconds, result.savedPercent || 0);
             } else {
                 if (result && result.segmentsFound === 0) {
+                    addProcessingLog("無音部分が見つかりませんでした", "info");
                     showToast(I18n.t("msg.noSilence"), "info");
+                    addToHistory({
+                        type: "無音カット",
+                        details: "無音部分が見つかりませんでした",
+                        success: true
+                    });
                 } else if (result && result.error) {
-                    // Show the actual error message from the result
+                    addProcessingLog(`エラー: ${result.error}`, "error");
                     showToast(result.error, "error");
+                    addToHistory({
+                        type: "無音カット",
+                        details: result.error,
+                        success: false
+                    });
+                    saveFailedOperation("silenceCut", options);
                 } else {
+                    addProcessingLog("処理に失敗しました", "error");
                     showToast(I18n.t("msg.error"), "error");
+                    addToHistory({
+                        type: "無音カット",
+                        details: "処理に失敗しました",
+                        success: false
+                    });
+                    saveFailedOperation("silenceCut", options);
                 }
             }
         } catch (e) {
             hideLoading();
             isProcessing = false;
+            addProcessingLog(`エラー: ${e.message || "不明なエラー"}`, "error");
             console.log("[CutOne] isProcessing set to false (error)");
             showToast(e.message || I18n.t("msg.error"), "error");
+            addToHistory({
+                type: "無音カット",
+                details: e.message || "不明なエラー",
+                success: false
+            });
+            saveFailedOperation("silenceCut", options);
         }
     }
 
@@ -1278,17 +3594,72 @@
     // ============================================
     // Loading & Toast
     // ============================================
-    function showLoading(text = "Processing...") {
+    function showLoading(text = "Processing...", options = {}) {
+        cancelRequested = false;
         elements.processingText.textContent = text;
         elements.processingOverlay.classList.remove("hidden");
+
+        // Start processing timer
+        startProcessingTimer();
+
+        // Show timer display
+        const timerDisplay = document.getElementById("processingTimer");
+        if (timerDisplay) {
+            timerDisplay.style.display = "block";
+        }
+
+        // Show/hide progress bar
+        if (options.showProgress) {
+            elements.progressContainer.style.display = "block";
+            elements.progressFill.style.width = "0%";
+            elements.progressPercent.textContent = "0%";
+        } else {
+            elements.progressContainer.style.display = "none";
+        }
+
+        // Show/hide cancel button
+        if (options.cancellable) {
+            elements.cancelProcessBtn.style.display = "inline-flex";
+            elements.cancelProcessBtn.onclick = () => {
+                cancelRequested = true;
+                elements.processingText.textContent = "キャンセル中...";
+                elements.cancelProcessBtn.style.display = "none";
+                if (options.onCancel) {
+                    options.onCancel();
+                }
+            };
+        } else {
+            elements.cancelProcessBtn.style.display = "none";
+        }
     }
 
     function updateLoadingText(text) {
         elements.processingText.textContent = text;
     }
 
+    function updateLoadingProgress(percent) {
+        elements.progressFill.style.width = percent + "%";
+        elements.progressPercent.textContent = Math.round(percent) + "%";
+    }
+
+    function isCancelRequested() {
+        return cancelRequested;
+    }
+
     function hideLoading() {
+        // Calculate and log total processing time
+        if (processingStartTime) {
+            const totalTime = Date.now() - processingStartTime;
+            addProcessingLog(`処理時間: ${formatElapsedTime(totalTime)}`, "info");
+        }
+
+        // Stop the timer
+        stopProcessingTimer();
+
         elements.processingOverlay.classList.add("hidden");
+        elements.progressContainer.style.display = "none";
+        elements.cancelProcessBtn.style.display = "none";
+        cancelRequested = false;
     }
 
     function showToast(message, type = "info") {
@@ -1306,6 +3677,20 @@
     window.AppFunctions = {
         showAuthScreen: showAuthScreen,
         checkLicenseStatus: checkLicenseStatus,
+        // Preset functions
+        loadPreset: function(name) {
+            const presets = getSavedSilencePresets();
+            const preset = presets.find(p => p.name === name);
+            if (preset) {
+                loadSilencePreset(preset);
+            }
+        },
+        deletePreset: function(name) {
+            if (confirm(`プリセット「${name}」を削除しますか？`)) {
+                deleteSilencePreset(name);
+                displayCustomPresets();
+            }
+        },
         // Debug functions
         refreshSequence: refreshSequenceInfo,
         testCEP: async function() {

@@ -28,16 +28,11 @@ const CEP = (function() {
         try {
             csInterface = new CSInterface();
             console.log("[CEP] CSInterface OK");
-            console.log("[CEP] Host environment:", JSON.stringify(csInterface.getHostEnvironment()));
             return csInterface;
         } catch (e) {
             console.error("[CEP] Init failed:", e);
             return null;
         }
-    }
-
-    function isConnected() {
-        return csInterface !== null;
     }
 
     function cepPathToFs(cepPath) {
@@ -47,6 +42,40 @@ const CEP = (function() {
             fsPath = "/" + fsPath;
         }
         return fsPath;
+    }
+
+    /**
+     * Format API errors with user-friendly messages
+     */
+    function formatApiError(statusCode, result) {
+        const errorCode = result.error?.code || result.error?.type || "";
+        const errorMessage = result.error?.message || "";
+
+        switch (statusCode) {
+            case 401:
+                return "APIキーが無効です。正しいキーを入力してください。";
+            case 403:
+                return "APIキーの権限がありません。OpenAIダッシュボードで確認してください。";
+            case 429:
+                if (errorMessage.includes("quota")) {
+                    return "APIクレジットが不足しています。OpenAIダッシュボードでクレジットを追加してください。";
+                }
+                return "API呼び出し回数の上限に達しました。しばらく待ってから再試行してください。";
+            case 500:
+            case 502:
+            case 503:
+                return "OpenAIサーバーが一時的に利用できません。しばらく待ってから再試行してください。";
+            case 413:
+                return "音声ファイルが大きすぎます。25MB以下のファイルを使用してください。";
+            default:
+                if (errorCode === "invalid_api_key") {
+                    return "APIキーが無効です。正しいキーを入力してください。";
+                }
+                if (errorCode === "insufficient_quota") {
+                    return "APIクレジットが不足しています。OpenAIダッシュボードでクレジットを追加してください。";
+                }
+                return `APIエラー (${statusCode}): ${errorMessage || "不明なエラー"}`;
+        }
     }
 
     function getFFmpegPath() {
@@ -430,47 +459,11 @@ const CEP = (function() {
                 throw new Error("処理範囲の長さが0です");
             }
 
-            // Step 2: Analyze audio levels (DaVinci Resolve's approach)
-            if (onProgress) onProgress("analyze", 10, null, "音声レベルを分析中... 0%");
+            // Step 2: Run silence detection directly (fast single-pass)
+            const effectiveThreshold = options.threshold || -35;
+            console.log("[CEP] Using threshold: " + effectiveThreshold + "dB");
 
-            const audioAnalysis = await analyzeAudioLevels(
-                sourcePath,
-                clipOutPoint,
-                (percent, remainingSec) => {
-                    let timeStr = "";
-                    if (remainingSec > 60) {
-                        const mins = Math.floor(remainingSec / 60);
-                        const secs = remainingSec % 60;
-                        timeStr = ` 残り約${mins}分${secs}秒`;
-                    } else if (remainingSec > 0) {
-                        timeStr = ` 残り約${remainingSec}秒`;
-                    }
-                    const adjustedPercent = 10 + Math.round(percent * 0.1); // 10-20%
-                    if (onProgress) onProgress("analyze", adjustedPercent, null, `音声レベルを分析中... ${percent}%${timeStr}`);
-                }
-            );
-
-            if (!audioAnalysis.hasAudio) {
-                throw new Error("音声トラックがありません。クリップに音声が含まれているか確認してください。");
-            }
-
-            // Step 3: Calculate appropriate threshold based on audio levels
-            // DaVinci Resolve uses relative thresholds
-            const userThreshold = options.threshold || -35;
-            let effectiveThreshold;
-
-            // If mean volume is very low, adjust threshold
-            if (audioAnalysis.meanVolume < -40) {
-                // Audio is quiet - use threshold relative to mean
-                effectiveThreshold = audioAnalysis.meanVolume - 15;
-                console.log("[CEP] Audio is quiet (mean: " + audioAnalysis.meanVolume + "dB)");
-                console.log("[CEP] Adjusting threshold to: " + effectiveThreshold + "dB");
-            } else {
-                effectiveThreshold = userThreshold;
-                console.log("[CEP] Using user threshold: " + effectiveThreshold + "dB");
-            }
-
-            // Step 4: Run silence detection
+            // Step 3: Run silence detection
             if (onProgress) onProgress("analyze", 20, null, "無音区間を検出中... 0%");
 
             const minSilenceDuration = options.minSilenceDuration || 0.3;
@@ -768,26 +761,10 @@ const CEP = (function() {
                 throw new Error("シーケンスの長さが0です");
             }
 
-            // Step 2: Analyze audio levels
-            if (onProgress) onProgress("analyze", 10, null, "音声レベルを分析中...");
+            // Step 2: Run silence detection directly (fast single-pass)
+            const effectiveThreshold = options.threshold || -35;
 
-            const audioAnalysis = await analyzeAudioLevels(seqInfo.sourcePath, clipOutPoint, null);
-
-            if (!audioAnalysis.hasAudio) {
-                throw new Error("音声トラックがありません");
-            }
-
-            // Step 3: Calculate threshold
-            const userThreshold = options.threshold || -35;
-            let effectiveThreshold;
-
-            if (audioAnalysis.meanVolume < -40) {
-                effectiveThreshold = audioAnalysis.meanVolume - 15;
-            } else {
-                effectiveThreshold = userThreshold;
-            }
-
-            // Step 4: Run silence detection
+            // Step 3: Run silence detection
             if (onProgress) onProgress("analyze", 30, null, "無音区間を検出中...");
 
             const minSilenceDuration = options.minSilenceDuration || 0.3;
@@ -1017,7 +994,7 @@ const CEP = (function() {
         // Step 3: Send to Whisper API
         if (onProgress) onProgress("AIで文字起こし中...", 30);
 
-        const transcription = await callWhisperAPI(audioPath, options.apiKey, options.language, onProgress);
+        const transcription = await callWhisperAPI(audioPath, options.apiKey, options.language, onProgress, options.customPrompt || "");
 
         // Step 4: Clean up temp file
         try {
@@ -1027,28 +1004,170 @@ const CEP = (function() {
             console.log("[CEP] Could not delete temp file:", e);
         }
 
-        // Step 5: Process and return result
+        // Step 5: Timestamps are already in sequence time
+        // (When extracting multi-clip audio, we add silence for gaps, so timestamps match sequence timeline)
+        if (onProgress) onProgress("タイムスタンプを確認中...", 80);
+
+        let convertedSegments = transcription.segments;
+        console.log("[CEP] Using original timestamps (already in sequence time due to silence padding)")
+
+        // Step 6: LLM post-processing (if enabled)
+        let finalSegments = convertedSegments;
+        if (options.enableLLMPostProcess && options.llmModel) {
+            console.log("[CEP] LLM post-processing enabled with model:", options.llmModel, "useBatch:", options.useBatchAPI);
+
+            if (options.useBatchAPI) {
+                // Use Batch API (50% cost reduction, may take longer)
+                finalSegments = await postProcessWithLLMBatch(
+                    convertedSegments,
+                    options.apiKey,
+                    options.llmModel,
+                    options.language,
+                    options.customPrompt || "",
+                    onProgress
+                );
+            } else {
+                // Use standard API (immediate response)
+                finalSegments = await postProcessWithLLM(
+                    convertedSegments,
+                    options.apiKey,
+                    options.llmModel,
+                    options.language,
+                    options.customPrompt || "",
+                    onProgress
+                );
+            }
+        } else {
+            console.log("[CEP] LLM post-processing disabled");
+        }
+
+        // Step 7: Apply subtitle formatting (character/line/duration limits)
+        if (options.subtitleFormat) {
+            if (onProgress) onProgress("字幕フォーマットを適用中...", 95);
+            finalSegments = formatSegments(finalSegments, options.subtitleFormat);
+        }
+
+        // Step 8: Clean up punctuation (remove 。, replace 、 with space)
+        finalSegments = finalSegments.map(seg => ({
+            ...seg,
+            text: seg.text
+                .replace(/。/g, "")
+                .replace(/、/g, " ")
+        }));
+
+        // Step 9: Process and return result
         if (onProgress) onProgress("処理完了", 100);
 
         return {
             success: true,
-            segments: transcription.segments,
+            segments: finalSegments,
             text: transcription.text,
             language: transcription.language
         };
     }
 
     /**
-     * Extract audio from sequence to temporary file
+     * Extract audio from ALL clips in sequence to temporary file
+     * Combines all clips with proper timing (including gaps as silence)
+     * Includes audio preprocessing for better transcription quality
      */
     async function extractSequenceAudio(sequenceInfo, onProgress) {
+        const os = require("os");
+        const fs = require("fs");
+        const tempDir = os.tmpdir();
+        const timestamp = Date.now();
+
+        // Get all clips from sequence
+        const allClips = await callExtendScript("getAllClipPaths", []);
+        if (!allClips || !allClips.success || !allClips.clips || allClips.clips.length === 0) {
+            // Fallback to single clip method
+            console.log("[CEP] No clips found via getAllClipPaths, falling back to single clip");
+            return extractSingleClipAudio(sequenceInfo, onProgress);
+        }
+
+        console.log("[CEP] Found", allClips.clips.length, "clips to process");
+
+        const ffmpegPath = getFFmpegPath();
+        if (!ffmpegPath) {
+            throw new Error("FFmpegが見つかりません");
+        }
+
+        // If only one clip, use simple extraction
+        if (allClips.clips.length === 1) {
+            return extractSingleClipAudio(sequenceInfo, onProgress);
+        }
+
+        if (onProgress) onProgress("複数クリップの音声を結合中...", 10);
+
+        // Extract audio from each clip and create concat list
+        const tempFiles = [];
+        const concatListPath = path.join(tempDir, `cutone_concat_${timestamp}.txt`);
+
+        try {
+            let lastEndTime = 0;
+            let concatContent = "";
+
+            for (let i = 0; i < allClips.clips.length; i++) {
+                const clip = allClips.clips[i];
+                if (onProgress) {
+                    onProgress(`クリップ ${i + 1}/${allClips.clips.length} を処理中...`, 10 + (i / allClips.clips.length) * 15);
+                }
+
+                // Add silence for gap between clips
+                const gapDuration = clip.sequenceStart - lastEndTime;
+                if (gapDuration > 0.1) { // More than 100ms gap
+                    const silencePath = path.join(tempDir, `cutone_silence_${timestamp}_${i}.mp3`);
+                    await generateSilence(ffmpegPath, silencePath, gapDuration);
+                    tempFiles.push(silencePath);
+                    concatContent += `file '${silencePath.replace(/'/g, "'\\''")}'\n`;
+                    console.log("[CEP] Added silence for gap:", gapDuration, "seconds");
+                }
+
+                // Extract audio from this clip
+                const clipAudioPath = path.join(tempDir, `cutone_clip_${timestamp}_${i}.mp3`);
+                await extractClipAudio(ffmpegPath, clip.path, clipAudioPath, clip.sourceIn, clip.sourceOut);
+                tempFiles.push(clipAudioPath);
+                concatContent += `file '${clipAudioPath.replace(/'/g, "'\\''")}'\n`;
+
+                lastEndTime = clip.sequenceEnd;
+            }
+
+            // Write concat list
+            fs.writeFileSync(concatListPath, concatContent);
+            tempFiles.push(concatListPath);
+
+            // Concatenate all audio files
+            if (onProgress) onProgress("音声ファイルを結合中...", 25);
+
+            const outputPath = path.join(tempDir, `cutone_audio_${timestamp}.mp3`);
+            await concatenateAudio(ffmpegPath, concatListPath, outputPath);
+
+            // Clean up temp files
+            for (const tempFile of tempFiles) {
+                try { fs.unlinkSync(tempFile); } catch (e) {}
+            }
+
+            console.log("[CEP] Combined audio extracted to:", outputPath);
+            return outputPath;
+
+        } catch (e) {
+            // Clean up on error
+            for (const tempFile of tempFiles) {
+                try { fs.unlinkSync(tempFile); } catch (err) {}
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Extract audio from a single clip (legacy fallback)
+     */
+    async function extractSingleClipAudio(sequenceInfo, onProgress) {
         return new Promise((resolve, reject) => {
-            // Get the first video/audio clip path from the sequence
             callExtendScript("getFirstClipPath", []).then(result => {
                 if (result && result.success && result.path) {
                     console.log("[CEP] Source media path:", result.path);
 
-                    // Create temp file for extracted audio
                     const os = require("os");
                     const tempDir = os.tmpdir();
                     const timestamp = Date.now();
@@ -1060,30 +1179,32 @@ const CEP = (function() {
                         return;
                     }
 
-                    // Extract audio using FFmpeg (16kHz mono for Whisper)
+                    // Use simple audio filter (afftdn requires special FFmpeg build)
+                    const audioFilter = "highpass=f=80,lowpass=f=8000,loudnorm=I=-16:TP=-1.5:LRA=11";
+
                     const args = [
                         "-y",
                         "-i", result.path,
                         "-vn",
+                        "-af", audioFilter,
                         "-acodec", "libmp3lame",
                         "-ar", "16000",
                         "-ac", "1",
-                        "-b:a", "64k",
+                        "-b:a", "128k",
                         outputPath
                     ];
 
-                    console.log("[CEP] Extracting audio:", ffmpegPath);
+                    console.log("[CEP] Extracting single clip audio:", ffmpegPath);
 
                     const ffmpeg = childProcess.spawn(ffmpegPath, args);
                     let stderr = "";
 
                     ffmpeg.stderr.on("data", (data) => {
                         stderr += data.toString();
-                        // Parse progress from FFmpeg output
                         const timeMatch = stderr.match(/time=(\d+):(\d+):(\d+)/);
                         if (timeMatch && onProgress) {
                             const mins = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
-                            onProgress(`音声を抽出中... ${mins}秒`, 10 + Math.min(mins, 15));
+                            onProgress(`音声を前処理中... ${mins}秒`, 10 + Math.min(mins, 15));
                         }
                     });
 
@@ -1108,9 +1229,161 @@ const CEP = (function() {
     }
 
     /**
-     * Call OpenAI Whisper API for transcription
+     * Generate silence audio file
      */
-    async function callWhisperAPI(audioPath, apiKey, language, onProgress) {
+    function generateSilence(ffmpegPath, outputPath, duration) {
+        return new Promise((resolve, reject) => {
+            const args = [
+                "-y",
+                "-f", "lavfi",
+                "-i", `anullsrc=r=16000:cl=mono`,
+                "-t", duration.toString(),
+                "-acodec", "libmp3lame",
+                "-b:a", "128k",
+                outputPath
+            ];
+
+            const ffmpeg = childProcess.spawn(ffmpegPath, args);
+            ffmpeg.on("close", (code) => {
+                if (code === 0) resolve();
+                else reject(new Error("Failed to generate silence"));
+            });
+            ffmpeg.on("error", reject);
+        });
+    }
+
+    /**
+     * Extract audio from a specific clip with in/out points
+     */
+    function extractClipAudio(ffmpegPath, inputPath, outputPath, inPoint, outPoint) {
+        return new Promise((resolve, reject) => {
+            const duration = outPoint - inPoint;
+            // Use minimal audio filter to avoid LAME encoder bugs
+            const audioFilter = "highpass=f=80,lowpass=f=8000";
+
+            const args = [
+                "-y",
+                "-ss", inPoint.toString(),
+                "-i", inputPath,
+                "-t", duration.toString(),
+                "-vn",
+                "-af", audioFilter,
+                "-acodec", "libmp3lame",
+                "-ar", "16000",
+                "-ac", "1",
+                "-b:a", "128k",
+                outputPath
+            ];
+
+            const ffmpeg = childProcess.spawn(ffmpegPath, args);
+            let stderr = "";
+
+            ffmpeg.stderr.on("data", (data) => {
+                stderr += data.toString();
+            });
+
+            ffmpeg.on("close", (code) => {
+                if (code === 0) resolve();
+                else {
+                    console.error("[CEP] Clip extraction error:", stderr);
+                    reject(new Error("Failed to extract clip audio"));
+                }
+            });
+            ffmpeg.on("error", reject);
+        });
+    }
+
+    /**
+     * Concatenate multiple audio files using FFmpeg concat
+     */
+    function concatenateAudio(ffmpegPath, concatListPath, outputPath) {
+        return new Promise((resolve, reject) => {
+            const args = [
+                "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concatListPath,
+                "-acodec", "libmp3lame",
+                "-ar", "16000",
+                "-ac", "1",
+                "-b:a", "128k",
+                outputPath
+            ];
+
+            const ffmpeg = childProcess.spawn(ffmpegPath, args);
+            let stderr = "";
+
+            ffmpeg.stderr.on("data", (data) => {
+                stderr += data.toString();
+            });
+
+            ffmpeg.on("close", (code) => {
+                if (code === 0) resolve();
+                else {
+                    console.error("[CEP] Concat error:", stderr);
+                    reject(new Error("Failed to concatenate audio"));
+                }
+            });
+            ffmpeg.on("error", reject);
+        });
+    }
+
+    /**
+     * Get language-specific prompt for Whisper API
+     * Prompts help improve transcription accuracy by providing context
+     * @param {string} language - Language code
+     * @param {string} customPrompt - User-provided custom keywords/terminology
+     */
+    function getWhisperPrompt(language, customPrompt = "") {
+        const prompts = {
+            // Japanese: Encourage proper punctuation and natural speech patterns
+            ja: "こんにちは。今日は、映像編集についてお話しします。句読点を正確に、自然な日本語で文字起こしをお願いします。",
+            // English: Professional video/podcast context
+            en: "Hello. Today, we'll be discussing video editing. Please transcribe accurately with proper punctuation.",
+            // Korean
+            ko: "안녕하세요. 오늘은 영상 편집에 대해 이야기하겠습니다.",
+            // Chinese (Simplified)
+            zh: "你好。今天我们来讨论视频编辑。",
+        };
+
+        let basePrompt = prompts[language] || "";
+
+        // If custom prompt is provided, append it to improve accuracy
+        if (customPrompt && customPrompt.trim()) {
+            const cleanedCustom = customPrompt.trim();
+            if (basePrompt) {
+                basePrompt += " " + cleanedCustom;
+            } else {
+                basePrompt = cleanedCustom;
+            }
+            console.log("[CEP] Combined prompt with custom keywords:", basePrompt.substring(0, 100) + "...");
+        }
+
+        return basePrompt || null;
+    }
+
+    /**
+     * Get predefined prompt presets for different content types
+     */
+    function getPromptPreset(presetName) {
+        const presets = {
+            video: "Adobe Premiere Pro, After Effects, DaVinci Resolve, タイムライン, シーケンス, カラーグレーディング, トランジション, エフェクト, レンダリング, エクスポート, フレームレート, ビットレート, コーデック, 4K, HDR",
+            tech: "API, SDK, JavaScript, TypeScript, Python, React, Node.js, AWS, Azure, Docker, Kubernetes, マイクロサービス, クラウド, デプロイ, CI/CD, Git, GitHub",
+            business: "KPI, ROI, PDCA, マーケティング, ブランディング, コンバージョン, リード, ファネル, セグメント, ターゲット, ペルソナ, カスタマージャーニー, エンゲージメント",
+            gaming: "FPS, RPG, MMO, レベルアップ, スキル, クエスト, ボス, レイド, ギルド, PvP, PvE, バフ, デバフ, クールダウン, スポーン, リスポーン"
+        };
+        return presets[presetName] || "";
+    }
+
+    /**
+     * Call OpenAI Whisper API for transcription
+     * @param {string} audioPath - Path to audio file
+     * @param {string} apiKey - OpenAI API key
+     * @param {string} language - Language code
+     * @param {Function} onProgress - Progress callback
+     * @param {string} customPrompt - User-provided custom keywords/terminology
+     */
+    async function callWhisperAPI(audioPath, apiKey, language, onProgress, customPrompt = "") {
         const https = require("https");
         const fs = require("fs");
 
@@ -1148,13 +1421,27 @@ const CEP = (function() {
             otherFields += `--${boundary}\r\n`;
             otherFields += `Content-Disposition: form-data; name="response_format"\r\n\r\nverbose_json\r\n`;
 
+            // Temperature = 0 for more deterministic/accurate output
+            otherFields += `--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="temperature"\r\n\r\n0\r\n`;
+
             if (language && language !== "auto") {
                 otherFields += `--${boundary}\r\n`;
                 otherFields += `Content-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`;
             }
 
+            // Add prompt for better accuracy (language-specific + custom keywords)
+            const prompt = getWhisperPrompt(language !== "auto" ? language : "ja", customPrompt);
+            if (prompt) {
+                otherFields += `--${boundary}\r\n`;
+                otherFields += `Content-Disposition: form-data; name="prompt"\r\n\r\n${prompt}\r\n`;
+            }
+
+            // Request both segment and word-level timestamps for precision
             otherFields += `--${boundary}\r\n`;
             otherFields += `Content-Disposition: form-data; name="timestamp_granularities[]"\r\n\r\nsegment\r\n`;
+            otherFields += `--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="timestamp_granularities[]"\r\n\r\nword\r\n`;
 
             otherFields += `--${boundary}--\r\n`;
 
@@ -1192,7 +1479,7 @@ const CEP = (function() {
 
                         if (res.statusCode !== 200) {
                             console.error("[CEP] Whisper API error:", result);
-                            const errorMsg = result.error?.message || "APIエラー: " + res.statusCode;
+                            const errorMsg = formatApiError(res.statusCode, result);
                             reject(new Error(errorMsg));
                             return;
                         }
@@ -1230,78 +1517,534 @@ const CEP = (function() {
     }
 
     /**
+     * Post-process transcription with LLM for better accuracy
+     * @param {Array} segments - Transcription segments from Whisper
+     * @param {string} apiKey - OpenAI API key
+     * @param {string} model - LLM model to use (gpt-4o, gpt-4o-mini, o3-mini, gpt-4.5-preview)
+     * @param {string} language - Target language
+     * @param {string} customPrompt - User's custom keywords/terms
+     * @param {Function} onProgress - Progress callback
+     * @returns {Promise<Array>} Corrected segments
+     */
+    async function postProcessWithLLM(segments, apiKey, model, language, customPrompt, onProgress) {
+        const https = require("https");
+
+        console.log("[CEP] Starting LLM post-processing with model:", model);
+        if (onProgress) onProgress("LLMで文字起こしを補正中...", 85);
+
+        // Combine all text for context-aware processing
+        const fullText = segments.map(s => s.text).join("\n");
+
+        // Build system prompt based on language
+        const langName = language === "ja" ? "日本語" :
+                        language === "en" ? "English" :
+                        language === "ko" ? "韓国語" :
+                        language === "zh" ? "中国語" : "日本語";
+
+        const systemPrompt = `あなたは音声認識の文字起こし結果を校正する専門家です。
+以下のルールに従って文字起こしテキストを修正してください：
+
+1. 誤字脱字を修正
+2. 句読点を適切に配置
+3. 話し言葉の「えー」「あのー」などのフィラーは削除
+4. 専門用語や固有名詞の誤認識を修正
+5. 文脈に合わない単語を正しく修正
+6. 改行はそのまま維持（各行がセグメントに対応）
+
+言語: ${langName}
+${customPrompt ? `\n重要な専門用語・キーワード: ${customPrompt}` : ""}
+
+修正後のテキストのみを出力してください。説明は不要です。`;
+
+        return new Promise((resolve, reject) => {
+            const requestBody = JSON.stringify({
+                model: model,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: fullText }
+                ],
+                temperature: 0.3
+            });
+
+            const requestOptions = {
+                hostname: "api.openai.com",
+                port: 443,
+                path: "/v1/chat/completions",
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                    "Content-Length": Buffer.byteLength(requestBody)
+                }
+            };
+
+            console.log("[CEP] Calling LLM API...");
+
+            const req = https.request(requestOptions, (res) => {
+                let responseData = "";
+
+                res.on("data", (chunk) => {
+                    responseData += chunk;
+                });
+
+                res.on("end", () => {
+                    try {
+                        const result = JSON.parse(responseData);
+
+                        if (res.statusCode !== 200) {
+                            console.error("[CEP] LLM API error:", result);
+                            // Return original segments if LLM fails
+                            console.log("[CEP] Returning original segments due to LLM error");
+                            resolve(segments);
+                            return;
+                        }
+
+                        const correctedText = result.choices[0].message.content;
+                        const correctedLines = correctedText.split("\n").filter(line => line.trim());
+
+                        console.log("[CEP] LLM correction complete, lines:", correctedLines.length);
+
+                        // Map corrected text back to segments
+                        const correctedSegments = segments.map((seg, i) => {
+                            return {
+                                ...seg,
+                                text: correctedLines[i] || seg.text,
+                                originalText: seg.text // Keep original for reference
+                            };
+                        });
+
+                        if (onProgress) onProgress("LLM補正完了", 90);
+                        resolve(correctedSegments);
+                    } catch (e) {
+                        console.error("[CEP] LLM parse error:", e);
+                        resolve(segments); // Return original on error
+                    }
+                });
+            });
+
+            req.on("error", (e) => {
+                console.error("[CEP] LLM request error:", e);
+                resolve(segments); // Return original on error
+            });
+
+            req.write(requestBody);
+            req.end();
+        });
+    }
+
+    /**
+     * Post-process transcription with LLM using Batch API (50% cost reduction)
+     * @param {Array} segments - Transcription segments from Whisper
+     * @param {string} apiKey - OpenAI API key
+     * @param {string} model - LLM model to use
+     * @param {string} language - Target language
+     * @param {string} customPrompt - User's custom keywords/terms
+     * @param {Function} onProgress - Progress callback
+     * @returns {Promise<Array>} Corrected segments
+     */
+    async function postProcessWithLLMBatch(segments, apiKey, model, language, customPrompt, onProgress) {
+        const https = require("https");
+
+        console.log("[CEP] Starting LLM Batch API post-processing with model:", model);
+        if (onProgress) onProgress("Batch APIでLLM補正を準備中...", 82);
+
+        // Build system prompt
+        const langName = language === "ja" ? "日本語" :
+                        language === "en" ? "English" :
+                        language === "ko" ? "韓国語" :
+                        language === "zh" ? "中国語" : "日本語";
+
+        const systemPrompt = `あなたは音声認識の文字起こし結果を校正する専門家です。
+以下のルールに従って文字起こしテキストを修正してください：
+
+1. 誤字脱字を修正
+2. 句読点を適切に配置
+3. 話し言葉の「えー」「あのー」などのフィラーは削除
+4. 専門用語や固有名詞の誤認識を修正
+5. 文脈に合わない単語を正しく修正
+6. 改行はそのまま維持（各行がセグメントに対応）
+
+言語: ${langName}
+${customPrompt ? `\n重要な専門用語・キーワード: ${customPrompt}` : ""}
+
+修正後のテキストのみを出力してください。説明は不要です。`;
+
+        const fullText = segments.map(s => s.text).join("\n");
+
+        // Create JSONL content for batch
+        const batchRequest = {
+            custom_id: `cutone-${Date.now()}`,
+            method: "POST",
+            url: "/v1/chat/completions",
+            body: {
+                model: model,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: fullText }
+                ],
+                temperature: 0.3
+            }
+        };
+
+        const jsonlContent = JSON.stringify(batchRequest);
+
+        // Helper function for HTTPS requests
+        function httpsRequest(options, body) {
+            return new Promise((resolve, reject) => {
+                const req = https.request(options, (res) => {
+                    let data = "";
+                    res.on("data", chunk => data += chunk);
+                    res.on("end", () => {
+                        try {
+                            resolve({ status: res.statusCode, data: JSON.parse(data) });
+                        } catch (e) {
+                            resolve({ status: res.statusCode, data: data });
+                        }
+                    });
+                });
+                req.on("error", reject);
+                if (body) req.write(body);
+                req.end();
+            });
+        }
+
+        try {
+            // Step 1: Upload JSONL file
+            if (onProgress) onProgress("バッチファイルをアップロード中...", 84);
+
+            const boundary = "----CutOneBatchBoundary" + Date.now();
+            let formData = `--${boundary}\r\n`;
+            formData += `Content-Disposition: form-data; name="purpose"\r\n\r\nbatch\r\n`;
+            formData += `--${boundary}\r\n`;
+            formData += `Content-Disposition: form-data; name="file"; filename="batch.jsonl"\r\n`;
+            formData += `Content-Type: application/jsonl\r\n\r\n`;
+            formData += jsonlContent + "\r\n";
+            formData += `--${boundary}--\r\n`;
+
+            const uploadResult = await httpsRequest({
+                hostname: "api.openai.com",
+                port: 443,
+                path: "/v1/files",
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": `multipart/form-data; boundary=${boundary}`
+                }
+            }, formData);
+
+            if (uploadResult.status !== 200 || !uploadResult.data.id) {
+                console.error("[CEP] File upload failed:", uploadResult);
+                return segments; // Return original on error
+            }
+
+            const fileId = uploadResult.data.id;
+            console.log("[CEP] Batch file uploaded:", fileId);
+
+            // Step 2: Create batch job
+            if (onProgress) onProgress("バッチジョブを作成中...", 86);
+
+            const batchResult = await httpsRequest({
+                hostname: "api.openai.com",
+                port: 443,
+                path: "/v1/batches",
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json"
+                }
+            }, JSON.stringify({
+                input_file_id: fileId,
+                endpoint: "/v1/chat/completions",
+                completion_window: "24h"
+            }));
+
+            if (batchResult.status !== 200 || !batchResult.data.id) {
+                console.error("[CEP] Batch creation failed:", batchResult);
+                return segments;
+            }
+
+            const batchId = batchResult.data.id;
+            console.log("[CEP] Batch job created:", batchId);
+
+            // Step 3: Poll for completion
+            if (onProgress) onProgress("バッチ処理を待機中...", 88);
+
+            let attempts = 0;
+            const maxAttempts = 120; // 10 minutes max wait (5s intervals)
+            let batchStatus;
+
+            while (attempts < maxAttempts) {
+                const statusResult = await httpsRequest({
+                    hostname: "api.openai.com",
+                    port: 443,
+                    path: `/v1/batches/${batchId}`,
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${apiKey}`
+                    }
+                }, null);
+
+                batchStatus = statusResult.data;
+                console.log("[CEP] Batch status:", batchStatus.status);
+
+                if (batchStatus.status === "completed") {
+                    break;
+                } else if (batchStatus.status === "failed" || batchStatus.status === "cancelled") {
+                    console.error("[CEP] Batch failed:", batchStatus);
+                    return segments;
+                }
+
+                // Wait 5 seconds before next poll
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                attempts++;
+
+                if (onProgress) {
+                    const progress = 88 + Math.min(attempts / maxAttempts * 5, 5);
+                    onProgress(`バッチ処理中... (${batchStatus.status})`, progress);
+                }
+            }
+
+            if (batchStatus.status !== "completed") {
+                console.log("[CEP] Batch not completed within timeout, returning original");
+                return segments;
+            }
+
+            // Step 4: Download results
+            if (onProgress) onProgress("バッチ結果を取得中...", 94);
+
+            const outputFileId = batchStatus.output_file_id;
+            const outputResult = await httpsRequest({
+                hostname: "api.openai.com",
+                port: 443,
+                path: `/v1/files/${outputFileId}/content`,
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`
+                }
+            }, null);
+
+            // Parse JSONL response
+            const responseLines = (typeof outputResult.data === "string" ? outputResult.data : JSON.stringify(outputResult.data)).split("\n").filter(l => l.trim());
+            const firstResult = JSON.parse(responseLines[0]);
+            const correctedText = firstResult.response.body.choices[0].message.content;
+            const correctedLines = correctedText.split("\n").filter(line => line.trim());
+
+            console.log("[CEP] Batch LLM correction complete, lines:", correctedLines.length);
+
+            // Map corrected text back to segments
+            const correctedSegments = segments.map((seg, i) => ({
+                ...seg,
+                text: correctedLines[i] || seg.text,
+                originalText: seg.text
+            }));
+
+            if (onProgress) onProgress("Batch API補正完了", 96);
+            return correctedSegments;
+
+        } catch (e) {
+            console.error("[CEP] Batch API error:", e);
+            return segments; // Return original on error
+        }
+    }
+
+    /**
+     * Format/split transcription segments based on subtitle format settings
+     * Only splits by character count and line limits - timing follows original audio
+     * @param {Array} segments - Transcription segments
+     * @param {Object} formatOptions - Format options
+     * @param {number} formatOptions.maxCharsPerSegment - Max characters per segment (0 = unlimited)
+     * @param {number} formatOptions.maxLinesPerSegment - Max lines per segment (1-4)
+     * @returns {Array} Formatted segments
+     */
+    function formatSegments(segments, formatOptions) {
+        const {
+            maxCharsPerSegment = 0,
+            maxLinesPerSegment = 2
+        } = formatOptions || {};
+
+        console.log("[CEP] Formatting segments with options:", formatOptions);
+
+        if (!segments || segments.length === 0) {
+            return segments;
+        }
+
+        // If no constraints, return as-is
+        if (maxCharsPerSegment === 0 && maxLinesPerSegment >= 2) {
+            console.log("[CEP] No formatting constraints, returning original segments");
+            return segments;
+        }
+
+        let formattedSegments = [];
+        let segmentId = 1;
+
+        for (const segment of segments) {
+            const splitSegments = splitByTextLimits(segment, maxCharsPerSegment, maxLinesPerSegment);
+
+            for (const split of splitSegments) {
+                formattedSegments.push({
+                    ...split,
+                    id: segmentId++
+                });
+            }
+        }
+
+        console.log("[CEP] Segments after formatting:", formattedSegments.length, "(original:", segments.length + ")");
+        return formattedSegments;
+    }
+
+    /**
+     * Split segment by text limits (characters and lines)
+     * Timing is proportionally distributed based on character count
+     */
+    function splitByTextLimits(segment, maxChars, maxLines) {
+        const text = segment.text || "";
+        const duration = segment.end - segment.start;
+
+        // Apply line limit first
+        let processedText = text;
+        if (maxLines === 1) {
+            processedText = text.replace(/\n/g, " ");
+        } else if (maxLines > 0 && text.split("\n").length > maxLines) {
+            const lines = text.split("\n");
+            processedText = lines.slice(0, maxLines).join("\n");
+        }
+
+        // If within character limit or no limit, return as-is
+        if (maxChars === 0 || processedText.length <= maxChars) {
+            return [{
+                ...segment,
+                text: processedText
+            }];
+        }
+
+        // Split by character limit with proportional timing
+        const splits = [];
+        let remainingText = processedText;
+        let currentStart = segment.start;
+        const charsPerSecond = processedText.length / duration;
+
+        while (remainingText.length > 0) {
+            let splitPos = Math.min(maxChars, remainingText.length);
+
+            // Find a natural break point (look backwards for punctuation/space)
+            if (splitPos < remainingText.length) {
+                const searchStart = Math.max(0, splitPos - 10);
+                for (let i = splitPos; i >= searchStart; i--) {
+                    const char = remainingText[i - 1];
+                    if (["。", ".", "、", ",", "　", " ", "！", "!", "？", "?"].includes(char)) {
+                        splitPos = i;
+                        break;
+                    }
+                }
+            }
+
+            const partText = remainingText.substring(0, splitPos).trim();
+            const partDuration = partText.length / charsPerSecond;
+            const partEnd = Math.min(currentStart + partDuration, segment.end);
+
+            if (partText) {
+                splits.push({
+                    ...segment,
+                    start: currentStart,
+                    end: partEnd,
+                    text: partText
+                });
+            }
+
+            remainingText = remainingText.substring(splitPos).trim();
+            currentStart = partEnd;
+        }
+
+        return splits.length > 0 ? splits : [segment];
+    }
+
+    /**
      * Add captions to sequence using ExtendScript
-     * If Caption API fails, automatically exports SRT and imports it
      */
     async function addCaptionsToSequence(segments) {
         console.log("[CEP] Adding captions to sequence, count:", segments.length);
 
+        // First try Caption API
         const result = await callExtendScript("addCaptionsToSequence", [JSON.stringify(segments)]);
 
-        if (result && result.success) {
-            console.log("[CEP] Captions added:", result.count);
+        if (result && result.success && result.method !== "markers") {
+            console.log("[CEP] Captions added via:", result.method);
             return result;
         }
 
-        // Caption API failed - try SRT import method
-        console.log("[CEP] Caption API failed, trying SRT import method...");
+        // If Caption API failed or returned markers, try SRT import method
+        console.log("[CEP] Caption API failed or used markers, trying SRT import...");
 
-        if (result && result.needsSrtImport) {
-            try {
-                // Get sequence info for path
-                const sequenceInfo = await callExtendScript("getSequenceInfo", []);
-                let srtPath = "";
-
-                if (sequenceInfo && sequenceInfo.projectPath) {
-                    const projectDir = sequenceInfo.projectPath.replace(/[^/\\]+$/, "");
-                    srtPath = projectDir + sequenceInfo.name + "_captions.srt";
-                } else if (sequenceInfo && sequenceInfo.name) {
-                    const os = require("os");
-                    srtPath = path.join(os.tmpdir(), sequenceInfo.name + "_captions.srt");
-                } else {
-                    const os = require("os");
-                    srtPath = path.join(os.tmpdir(), "cutone_captions_" + Date.now() + ".srt");
-                }
-
-                // Export SRT
-                console.log("[CEP] Exporting SRT to:", srtPath);
-                await exportSRT(segments, srtPath);
-
-                // Import SRT into Premiere
-                console.log("[CEP] Importing SRT into Premiere...");
-                const importResult = await callExtendScript("importSRTCaptions", [srtPath]);
-
-                if (importResult && importResult.success) {
-                    console.log("[CEP] SRT import result:", importResult);
-                    return {
-                        success: true,
-                        count: segments.length,
-                        method: importResult.addedToSequence ? "srtImport" : "srtProjectOnly",
-                        message: importResult.message,
-                        srtPath: srtPath
-                    };
-                }
-            } catch (srtErr) {
-                console.error("[CEP] SRT import failed:", srtErr);
+        try {
+            // Get project path for SRT output
+            const seqInfo = await callExtendScript("getSequenceInfo", []);
+            let srtDir = "/tmp";
+            if (seqInfo && seqInfo.projectPath) {
+                const path = require("path");
+                srtDir = path.dirname(seqInfo.projectPath);
             }
+
+            // Generate unique filename
+            const timestamp = Date.now();
+            const srtPath = require("path").join(srtDir, `captions_${timestamp}.srt`);
+
+            // Export SRT file
+            await exportSRT(segments, srtPath);
+            console.log("[CEP] SRT exported to:", srtPath);
+
+            // Import SRT into Premiere Pro project
+            const importResult = await callExtendScript("importSRTCaptions", [srtPath]);
+            console.log("[CEP] SRT import result:", importResult);
+
+            if (importResult && importResult.success) {
+                return {
+                    success: true,
+                    method: "srtImport",
+                    count: segments.length,
+                    srtPath: srtPath,
+                    message: "SRTファイルをプロジェクトにインポートしました。字幕トラックにドラッグしてください。"
+                };
+            }
+        } catch (srtErr) {
+            console.error("[CEP] SRT import failed:", srtErr);
         }
 
-        // Return the original error with debug info
-        return result || { success: false, error: "キャプションの追加に失敗しました" };
+        // Return original result (markers) if SRT import also failed
+        if (result && result.success) {
+            return result;
+        }
+
+        throw new Error(result?.error || "キャプションの追加に失敗しました");
     }
 
     /**
      * Export transcription as SRT file
+     * @param {Array} segments - Transcription segments
+     * @param {string} outputPath - Output file path
+     * @param {number} timeOffset - Time offset to add (e.g., sequence start timecode)
      */
-    async function exportSRT(segments, outputPath) {
+    async function exportSRT(segments, outputPath, timeOffset = 0) {
         const fs = require("fs");
 
-        // Generate SRT content
+        // Get sequence start timecode if not provided
+        if (timeOffset === 0) {
+            try {
+                const seqInfo = await callExtendScript("getSequenceInfo", []);
+                if (seqInfo && seqInfo.success && seqInfo.zeroPoint) {
+                    timeOffset = seqInfo.zeroPoint;
+                    console.log("[CEP] Applying sequence start timecode offset:", timeOffset, "seconds");
+                }
+            } catch (e) {
+                console.log("[CEP] Could not get sequence timecode, using 0 offset");
+            }
+        }
+
+        // Generate SRT content with offset applied
         let srtContent = "";
 
         segments.forEach((seg, index) => {
-            const startTime = formatSRTTime(seg.start);
-            const endTime = formatSRTTime(seg.end);
+            const startTime = formatSRTTime(seg.start + timeOffset);
+            const endTime = formatSRTTime(seg.end + timeOffset);
 
             srtContent += `${index + 1}\n`;
             srtContent += `${startTime} --> ${endTime}\n`;
@@ -1310,9 +2053,9 @@ const CEP = (function() {
 
         // Write to file
         fs.writeFileSync(outputPath, srtContent, "utf8");
-        console.log("[CEP] SRT exported to:", outputPath);
+        console.log("[CEP] SRT exported to:", outputPath, "with offset:", timeOffset);
 
-        return { success: true, path: outputPath };
+        return { success: true, path: outputPath, timeOffset: timeOffset };
     }
 
     /**
@@ -1340,7 +2083,6 @@ const CEP = (function() {
 
     return {
         init,
-        isConnected,
         getActiveSequence,
         processWithOptions,
         previewWithOptions,
@@ -1355,6 +2097,7 @@ const CEP = (function() {
         transcribeAudio,
         addCaptionsToSequence,
         exportSRT,
-        debugCaptionAPI
+        debugCaptionAPI,
+        getPromptPreset
     };
 })();

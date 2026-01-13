@@ -315,66 +315,23 @@ function testSingleExtract() {
 // ============================================
 function getActiveSequence() {
     try {
-        log("=== getActiveSequence called ===");
-
         var sequence = app.project.activeSequence;
-        log("activeSequence: " + (sequence ? sequence.name : "null"));
-
-        // If no active sequence, try to find any sequence in the project
         if (!sequence) {
-            log("No active sequence, searching project for sequences...");
-            sequence = findFirstSequenceInProject();
-            if (sequence) {
-                log("Found sequence in project: " + sequence.name);
-                // Try to open it in the timeline
-                try {
-                    sequence.openInTimeline();
-                    log("Opened sequence in timeline");
-                } catch (openErr) {
-                    log("Could not open in timeline: " + openErr);
-                }
-            }
-        }
-
-        if (!sequence) {
-            log("No sequence found anywhere");
             return JSON.stringify({ success: false, error: "No active sequence" });
         }
 
         var durationSeconds = getSequenceDuration(sequence);
-        log("Duration: " + durationSeconds + "s");
 
-        var result = {
+        return JSON.stringify({
             success: true,
             name: sequence.name,
             videoTracks: sequence.videoTracks.numTracks,
             audioTracks: sequence.audioTracks.numTracks,
             duration: durationSeconds,
             durationFormatted: formatTime(durationSeconds)
-        };
-
-        log("Returning: " + JSON.stringify(result));
-        return JSON.stringify(result);
+        });
     } catch (e) {
-        log("getActiveSequence error: " + e.toString());
         return JSON.stringify({ success: false, error: e.toString() });
-    }
-}
-
-/**
- * Find the first sequence in the project using app.project.sequences
- */
-function findFirstSequenceInProject() {
-    try {
-        if (app.project.sequences && app.project.sequences.numSequences > 0) {
-            log("Found " + app.project.sequences.numSequences + " sequences in project");
-            return app.project.sequences[0];
-        }
-        log("No sequences in project");
-        return null;
-    } catch (e) {
-        log("findFirstSequenceInProject error: " + e);
-        return null;
     }
 }
 
@@ -423,6 +380,15 @@ function getSequenceInfo() {
         var selectedClipsInfo = getSelectedClipsRange(sequence);
         log("Selected clips: " + (selectedClipsInfo ? selectedClipsInfo.count + " clips" : "none"));
 
+        // Get sequence start timecode (zeroPoint)
+        var zeroPointSeconds = 0;
+        try {
+            zeroPointSeconds = ticksToSeconds(sequence.zeroPoint);
+            log("Sequence zeroPoint: " + zeroPointSeconds.toFixed(2) + "s");
+        } catch (e) {
+            log("Could not get zeroPoint: " + e.toString());
+        }
+
         return JSON.stringify({
             success: true,
             name: sequence.name,
@@ -437,7 +403,9 @@ function getSequenceInfo() {
             // New fields for section type
             seqInPoint: seqInPoint,
             seqOutPoint: seqOutPoint,
-            selectedClips: selectedClipsInfo
+            selectedClips: selectedClipsInfo,
+            // Sequence start timecode
+            zeroPoint: zeroPointSeconds
         });
 
     } catch (e) {
@@ -1939,6 +1907,107 @@ function getAudioLevels(numSamples) {
 // ============================================
 
 /**
+ * Get all clip paths in the sequence with timing info
+ * Used to extract and combine audio for full sequence transcription
+ */
+function getAllClipPaths() {
+    try {
+        var sequence = app.project.activeSequence;
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== getAllClipPaths ===");
+
+        var clips = [];
+        var processedPaths = {}; // Track unique paths
+
+        // Get frame rate for time conversion
+        var frameRate = sequence.getSettings().videoFrameRate.seconds;
+        if (!frameRate || frameRate <= 0) frameRate = 1/29.97;
+
+        // Collect all video clips with audio
+        for (var v = 0; v < sequence.videoTracks.numTracks; v++) {
+            var track = sequence.videoTracks[v];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                if (clip && clip.projectItem) {
+                    var mediaPath = clip.projectItem.getMediaPath();
+                    if (mediaPath && mediaPath.length > 0) {
+                        var startTime = clip.start.seconds;
+                        var endTime = clip.end.seconds;
+                        var inPoint = clip.inPoint ? clip.inPoint.seconds : 0;
+                        var outPoint = clip.outPoint ? clip.outPoint.seconds : (endTime - startTime);
+
+                        clips.push({
+                            path: mediaPath,
+                            sequenceStart: startTime,
+                            sequenceEnd: endTime,
+                            sourceIn: inPoint,
+                            sourceOut: outPoint,
+                            duration: endTime - startTime,
+                            type: "video"
+                        });
+                        processedPaths[mediaPath + "_" + startTime] = true;
+                        log("Video clip: " + mediaPath + " @ " + startTime + "-" + endTime);
+                    }
+                }
+            }
+        }
+
+        // Collect audio-only clips (not linked to video)
+        for (var a = 0; a < sequence.audioTracks.numTracks; a++) {
+            var aTrack = sequence.audioTracks[a];
+            for (var ac = 0; ac < aTrack.clips.numItems; ac++) {
+                var aClip = aTrack.clips[ac];
+                if (aClip && aClip.projectItem) {
+                    var aMediaPath = aClip.projectItem.getMediaPath();
+                    var aStartTime = aClip.start.seconds;
+                    var key = aMediaPath + "_" + aStartTime;
+
+                    // Skip if already processed (linked audio)
+                    if (processedPaths[key]) continue;
+
+                    if (aMediaPath && aMediaPath.length > 0) {
+                        var aEndTime = aClip.end.seconds;
+                        var aInPoint = aClip.inPoint ? aClip.inPoint.seconds : 0;
+                        var aOutPoint = aClip.outPoint ? aClip.outPoint.seconds : (aEndTime - aStartTime);
+
+                        clips.push({
+                            path: aMediaPath,
+                            sequenceStart: aStartTime,
+                            sequenceEnd: aEndTime,
+                            sourceIn: aInPoint,
+                            sourceOut: aOutPoint,
+                            duration: aEndTime - aStartTime,
+                            type: "audio"
+                        });
+                        log("Audio clip: " + aMediaPath + " @ " + aStartTime + "-" + aEndTime);
+                    }
+                }
+            }
+        }
+
+        // Sort by sequence start time
+        clips.sort(function(a, b) {
+            return a.sequenceStart - b.sequenceStart;
+        });
+
+        log("Total clips found: " + clips.length);
+
+        return JSON.stringify({
+            success: true,
+            clips: clips,
+            sequenceDuration: sequence.end.seconds
+        });
+
+    } catch (e) {
+        log("getAllClipPaths error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
  * Get the file path of the first clip in the sequence
  * Used to extract audio for transcription
  */
@@ -1995,6 +2064,77 @@ function getFirstClipPath() {
         return JSON.stringify({ success: false, error: "No clips with media found in sequence" });
     } catch (e) {
         log("getFirstClipPath error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Get clip mapping information for timestamp conversion
+ * Returns all audio clips with their sequence position and source in/out points
+ * Used to convert Whisper timestamps (source-based) to sequence timeline positions
+ */
+function getClipMapping() {
+    try {
+        var sequence = app.project.activeSequence;
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== getClipMapping ===");
+
+        var clips = [];
+        var sourceMediaPath = null;
+
+        // Collect all audio clips from track 1 (primary audio)
+        if (sequence.audioTracks.numTracks > 0) {
+            var audioTrack = sequence.audioTracks[0];
+            log("Audio track clips count: " + audioTrack.clips.numItems);
+
+            for (var i = 0; i < audioTrack.clips.numItems; i++) {
+                var clip = audioTrack.clips[i];
+                if (!clip) continue;
+
+                // Get clip times
+                var seqStart = getTimeInSeconds(clip.start);
+                var seqEnd = getTimeInSeconds(clip.end);
+                var sourceIn = getTimeInSeconds(clip.inPoint);
+                var sourceOut = getTimeInSeconds(clip.outPoint);
+
+                // Get media path
+                var mediaPath = "";
+                if (clip.projectItem) {
+                    mediaPath = clip.projectItem.getMediaPath() || "";
+                    if (!sourceMediaPath && mediaPath.length > 0) {
+                        sourceMediaPath = mediaPath;
+                    }
+                }
+
+                log("Clip " + i + ": seq=" + seqStart.toFixed(3) + "-" + seqEnd.toFixed(3) +
+                    ", src=" + sourceIn.toFixed(3) + "-" + sourceOut.toFixed(3));
+
+                clips.push({
+                    index: i,
+                    sequenceStart: seqStart,
+                    sequenceEnd: seqEnd,
+                    sourceIn: sourceIn,
+                    sourceOut: sourceOut,
+                    duration: seqEnd - seqStart,
+                    mediaPath: mediaPath
+                });
+            }
+        }
+
+        log("Total clips mapped: " + clips.length);
+        log("Source media path: " + sourceMediaPath);
+
+        return JSON.stringify({
+            success: true,
+            clips: clips,
+            sourceMediaPath: sourceMediaPath,
+            clipCount: clips.length
+        });
+    } catch (e) {
+        log("getClipMapping error: " + e.toString());
         return JSON.stringify({ success: false, error: e.toString() });
     }
 }
@@ -2134,16 +2274,59 @@ function addCaptionsToSequence(segmentsJson) {
             debugInfo.captionApiError = captionErr.toString();
         }
 
-        // Caption API failed - return failure with debug info
-        // Do NOT fall back to markers - user explicitly doesn't want markers
-        log("Caption API failed - returning error");
+        // Fallback: Create Graphics Text clips as subtitles on V2 track
+        log("Caption API failed, trying Graphics Text fallback");
 
-        // Return detailed error so CEP can handle SRT export/import
+        try {
+            addedCount = createTextGraphicsForCaptions(sequence, segments);
+
+            if (addedCount > 0) {
+                return JSON.stringify({
+                    success: true,
+                    count: addedCount,
+                    total: segments.length,
+                    method: "graphicsText",
+                    debug: debugInfo
+                });
+            }
+        } catch (gfxErr) {
+            log("Graphics text error: " + gfxErr);
+            debugInfo.graphicsError = gfxErr.toString();
+        }
+
+        // Final fallback: Use markers (original method)
+        log("Falling back to markers method");
+
+        var markers = sequence.markers;
+        addedCount = 0;
+
+        for (var i = 0; i < segments.length; i++) {
+            var seg = segments[i];
+            try {
+                // FIXED: Convert seconds to ticks for createMarker
+                var startTicks = Math.round(seg.start * TICKS_PER_SECOND);
+                var endTicks = Math.round(seg.end * TICKS_PER_SECOND);
+
+                var marker = markers.createMarker(startTicks);
+                if (marker) {
+                    marker.name = seg.text.substring(0, 50);
+                    marker.comments = seg.text;
+                    marker.end = { ticks: String(endTicks) };
+                    marker.setColorByIndex(3); // Yellow
+                    addedCount++;
+                }
+            } catch (markerErr) {
+                log("Marker error: " + markerErr);
+            }
+        }
+
         return JSON.stringify({
-            success: false,
-            error: "Caption Track APIが利用できません",
-            debug: debugInfo,
-            needsSrtImport: true
+            success: true,
+            count: addedCount,
+            total: segments.length,
+            method: "markers",
+            note: "Caption API not available. Markers created instead. Import the SRT file manually for proper subtitles.",
+            debug: debugInfo
         });
     } catch (e) {
         log("addCaptionsToSequence error: " + e.toString());
@@ -2251,7 +2434,7 @@ function findMogrtTemplate() {
 }
 
 /**
- * Import SRT file as captions and add to sequence
+ * Import SRT file as captions
  * @param {string} srtPath - Path to SRT file
  */
 function importSRTCaptions(srtPath) {
@@ -2261,110 +2444,150 @@ function importSRTCaptions(srtPath) {
             return JSON.stringify({ success: false, error: "No active sequence" });
         }
 
-        log("=== importSRTCaptions v21.3 ===");
+        log("=== importSRTCaptions ===");
         log("Importing: " + srtPath);
 
-        // Import the SRT file into the project
-        var importSuccess = app.project.importFiles([srtPath], true, app.project.rootItem, false);
+        // Try to import the SRT file using the project importer
+        var importResult = app.project.importFiles([srtPath], true, app.project.rootItem, false);
 
-        if (!importSuccess) {
-            return JSON.stringify({ success: false, error: "SRTファイルのインポートに失敗しました" });
+        if (importResult) {
+            log("SRT file imported successfully");
+            return JSON.stringify({ success: true, message: "SRT imported" });
+        } else {
+            return JSON.stringify({ success: false, error: "Import failed" });
+        }
+    } catch (e) {
+        log("importSRTCaptions error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Show save dialog for SRT file
+ * @param {string} defaultName - Default filename (without extension)
+ * @param {string} defaultPath - Default directory path
+ */
+function showSaveDialog(defaultName, defaultPath) {
+    try {
+        log("=== showSaveDialog ===");
+        log("defaultName: " + defaultName);
+        log("defaultPath: " + defaultPath);
+
+        var defaultFile;
+        if (defaultPath && defaultPath.length > 0) {
+            defaultFile = new File(defaultPath + "/" + defaultName + ".srt");
+        } else {
+            defaultFile = new File("~/" + defaultName + ".srt");
         }
 
-        log("SRT file imported to project");
+        var saveFile = defaultFile.saveDlg("SRTファイルを保存", "SRT Files:*.srt");
 
-        // Find the imported SRT item in the project
+        if (saveFile) {
+            log("User selected: " + saveFile.fsName);
+            return JSON.stringify({
+                success: true,
+                path: saveFile.fsName
+            });
+        } else {
+            log("User cancelled save dialog");
+            return JSON.stringify({
+                success: false,
+                cancelled: true
+            });
+        }
+    } catch (e) {
+        log("showSaveDialog error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Set player position (jump to time)
+ * @param {number} seconds - Time in seconds
+ */
+function setPlayerPosition(seconds) {
+    try {
+        var sequence = app.project.activeSequence;
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== setPlayerPosition ===");
+        log("Jumping to: " + seconds + " seconds");
+
+        // Convert seconds to ticks
+        var ticks = Math.round(seconds * TICKS_PER_SECOND);
+
+        // Set player position
+        sequence.setPlayerPosition(String(ticks));
+
+        return JSON.stringify({ success: true, time: seconds });
+    } catch (e) {
+        log("setPlayerPosition error: " + e.toString());
+        return JSON.stringify({ success: false, error: e.toString() });
+    }
+}
+
+/**
+ * Add SRT to caption track automatically
+ * @param {string} srtPath - Path to SRT file
+ */
+function addSRTToCaptionTrack(srtPath) {
+    try {
+        var sequence = app.project.activeSequence;
+        if (!sequence) {
+            return JSON.stringify({ success: false, error: "No active sequence" });
+        }
+
+        log("=== addSRTToCaptionTrack ===");
+        log("SRT path: " + srtPath);
+
+        // Import SRT file to project
+        var importResult = app.project.importFiles([srtPath], true, app.project.rootItem, false);
+
+        if (!importResult) {
+            return JSON.stringify({ success: false, error: "Failed to import SRT file" });
+        }
+
+        // Find the imported SRT in project
         var srtItem = null;
-        var rootItem = app.project.rootItem;
+        var fileName = srtPath.split("/").pop().split("\\").pop();
+        var nameWithoutExt = fileName.replace(/\.srt$/i, "");
 
-        // Get the filename from path
-        var pathParts = srtPath.split(/[/\\]/);
-        var fileName = pathParts[pathParts.length - 1];
-        var baseName = fileName.replace(".srt", "");
+        log("Looking for imported file: " + nameWithoutExt);
 
-        log("Looking for item: " + baseName);
-
-        // Search in root item children
-        for (var i = rootItem.children.numItems - 1; i >= 0 && !srtItem; i--) {
-            var item = rootItem.children[i];
-            if (item && item.name) {
-                log("  Found item: " + item.name + " (type: " + item.type + ")");
-                if (item.name === fileName || item.name === baseName || item.name.indexOf(baseName) >= 0) {
-                    srtItem = item;
-                    log("  -> MATCH!");
-                }
+        // Search in root item
+        for (var i = 0; i < app.project.rootItem.children.numItems; i++) {
+            var item = app.project.rootItem.children[i];
+            if (item.name === nameWithoutExt || item.name === fileName) {
+                srtItem = item;
+                log("Found SRT item: " + item.name);
+                break;
             }
         }
 
         if (!srtItem) {
-            log("Could not find imported SRT item in project");
+            log("SRT item not found in project, returning success with import only");
             return JSON.stringify({
                 success: true,
-                message: "SRTファイルをプロジェクトにインポートしました。シーケンスにドラッグしてください。",
-                imported: true,
-                addedToSequence: false
+                method: "importOnly",
+                message: "SRTファイルをインポートしました。キャプショントラックにドラッグしてください。"
             });
         }
 
-        // Try to add the SRT to the sequence as a caption track
-        log("Attempting to add SRT to sequence...");
+        // Try to add to caption track
+        // Note: Premiere Pro's ExtendScript API doesn't have direct caption track manipulation
+        // The SRT is imported and user needs to drag it to caption track
 
-        // Method 1: Try insertClip on caption track
-        var addedToSequence = false;
+        return JSON.stringify({
+            success: true,
+            method: "imported",
+            projectItem: srtItem.name,
+            message: "SRTファイルをプロジェクトにインポートしました。キャプショントラックにドラッグしてください。"
+        });
 
-        try {
-            if (sequence.captionTracks && sequence.captionTracks.numTracks >= 0) {
-                // Ensure we have a caption track
-                var captionTrack = null;
-                if (sequence.captionTracks.numTracks > 0) {
-                    captionTrack = sequence.captionTracks[0];
-                } else if (sequence.createCaptionTrack) {
-                    captionTrack = sequence.createCaptionTrack();
-                }
-
-                if (captionTrack && captionTrack.insertClip) {
-                    captionTrack.insertClip(srtItem, 0);
-                    addedToSequence = true;
-                    log("Added SRT to caption track via insertClip");
-                }
-            }
-        } catch (capErr) {
-            log("Could not add to caption track: " + capErr);
-        }
-
-        // Method 2: Try overwriteClip
-        if (!addedToSequence) {
-            try {
-                if (sequence.captionTracks && sequence.captionTracks.numTracks > 0) {
-                    var captionTrack = sequence.captionTracks[0];
-                    if (captionTrack.overwriteClip) {
-                        captionTrack.overwriteClip(srtItem, 0);
-                        addedToSequence = true;
-                        log("Added SRT to caption track via overwriteClip");
-                    }
-                }
-            } catch (overErr) {
-                log("Could not overwrite to caption track: " + overErr);
-            }
-        }
-
-        if (addedToSequence) {
-            return JSON.stringify({
-                success: true,
-                message: "SRTを字幕トラックに追加しました",
-                imported: true,
-                addedToSequence: true
-            });
-        } else {
-            return JSON.stringify({
-                success: true,
-                message: "SRTファイルをプロジェクトにインポートしました。「キャプション」パネルから読み込むか、シーケンスにドラッグしてください。",
-                imported: true,
-                addedToSequence: false
-            });
-        }
     } catch (e) {
-        log("importSRTCaptions error: " + e.toString());
+        log("addSRTToCaptionTrack error: " + e.toString());
         return JSON.stringify({ success: false, error: e.toString() });
     }
 }

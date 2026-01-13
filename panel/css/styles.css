@@ -911,6 +911,56 @@ body {
     font-size: 14px;
     color: var(--text-secondary);
     font-weight: 500;
+    margin-bottom: 12px;
+}
+
+.progress-container {
+    width: 200px;
+    margin: 0 auto 16px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #7f97f7);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.progress-percent {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.btn-cancel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 8px;
+}
+
+.btn-cancel:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #ef4444;
 }
 
 /* ============================================
@@ -1492,6 +1542,36 @@ body {
     color: var(--text-muted);
 }
 
+.input.small {
+    width: 80px;
+    padding: 8px 10px;
+    font-size: 13px;
+    text-align: center;
+}
+
+.input-with-unit .unit {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.input-group.compact {
+    margin-bottom: 0;
+    padding-left: 0;
+    border-left: none;
+}
+
+.input-group.compact label {
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+
+.input-group.compact .input-hint {
+    margin-top: 4px;
+    margin-bottom: 0;
+}
+
 /* ============================================
    Radio Groups
    ============================================ */
@@ -1816,17 +1896,77 @@ body {
     border-color: var(--accent);
 }
 
+.transcription-segment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
 .transcription-segment-time {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11px;
     font-weight: 600;
-    color: var(--accent);
     font-family: monospace;
-    margin-bottom: 4px;
+}
+
+.time-badge {
+    background: var(--accent);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+}
+
+.time-arrow {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.segment-jump-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s;
+    opacity: 0;
+}
+
+.transcription-segment:hover .segment-jump-btn {
+    opacity: 1;
+}
+
+.segment-jump-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
 }
 
 .transcription-segment-text {
     color: var(--text-primary);
     word-break: break-word;
+    padding: 8px;
+    border-radius: 6px;
+    background: var(--bg-primary);
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    outline: none;
+    min-height: 24px;
+    line-height: 1.5;
+}
+
+.transcription-segment-text:hover {
+    border-color: var(--border);
+}
+
+.transcription-segment-text:focus {
+    border-color: var(--accent);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(95, 124, 242, 0.1);
 }
 
 .transcription-stats {
@@ -1874,4 +2014,1623 @@ body {
 
 .settings-card-title svg {
     color: var(--accent);
+}
+
+/* ============================================
+   API Key Status Indicator
+   ============================================ */
+.api-key-status {
+    position: absolute;
+    right: 40px;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.api-key-status.valid {
+    color: #22c55e;
+    font-size: 16px;
+}
+
+.api-key-status.invalid {
+    color: #ef4444;
+    font-size: 10px;
+    right: 44px;
+}
+
+/* ============================================
+   Checkbox Content (with hint)
+   ============================================ */
+.checkbox-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.checkbox-content span:first-child {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.checkbox-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Quick Action Button
+   ============================================ */
+.quick-action-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.btn-quick {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-quick:hover {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 12px rgba(95, 124, 242, 0.3);
+}
+
+.btn-quick svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ============================================
+   Processing Log
+   ============================================ */
+.processing-log-container {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    margin-top: 16px;
+    overflow: hidden;
+}
+
+.processing-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.log-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.log-toggle-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.processing-log-content {
+    max-height: 150px;
+    overflow-y: auto;
+    padding: 8px 14px;
+}
+
+.log-entry {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border);
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-time {
+    color: var(--text-muted);
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+.log-message {
+    color: var(--text-secondary);
+}
+
+.log-entry.log-success .log-message {
+    color: var(--success);
+}
+
+.log-entry.log-error .log-message {
+    color: var(--error);
+}
+
+.log-entry.log-warning .log-message {
+    color: var(--warning);
+}
+
+/* ============================================
+   Settings Card Header (with actions)
+   ============================================ */
+.settings-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.save-preset-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.save-preset-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Custom Presets */
+.custom-presets {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.custom-presets-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.custom-presets-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.custom-preset-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.custom-preset-item .preset-name {
+    cursor: pointer;
+}
+
+.custom-preset-item .preset-delete {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin-left: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.custom-preset-item .preset-delete:hover {
+    opacity: 1;
+    color: var(--error);
+}
+
+/* ============================================
+   Keyboard Shortcut Hints
+   ============================================ */
+.shortcut-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+/* ============================================
+   Processing Timer
+   ============================================ */
+.processing-timer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 6px 14px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: monospace;
+    color: var(--text-secondary);
+}
+
+.processing-timer svg {
+    color: var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ============================================
+   Dark Mode Support
+   ============================================ */
+body.dark-mode {
+    --bg-primary: #1a1b26;
+    --bg-secondary: #24283b;
+    --bg-card: #1f2335;
+    --bg-tertiary: #292e42;
+    --accent: #7aa2f7;
+    --accent-hover: #89b4fa;
+    --accent-dark: #5d8bdc;
+    --accent-light: rgba(122, 162, 247, 0.15);
+    --text-primary: #c0caf5;
+    --text-secondary: #9aa5ce;
+    --text-muted: #565f89;
+    --border: #3b4261;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.2);
+    --success: #9ece6a;
+    --error: #f7768e;
+    --warning: #e0af68;
+}
+
+body.dark-mode .overlay {
+    background: rgba(26, 27, 38, 0.95);
+}
+
+body.dark-mode .toast {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+}
+
+body.dark-mode .input-number,
+body.dark-mode .input {
+    background: var(--bg-secondary);
+    border-color: var(--border);
+    color: var(--text-primary);
+}
+
+body.dark-mode .input-number:focus,
+body.dark-mode .input:focus {
+    background: var(--bg-card);
+}
+
+body.dark-mode .preset-btn:not(.active) {
+    background: var(--bg-secondary);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+body.dark-mode .preset-btn:hover:not(.active) {
+    background: var(--bg-tertiary);
+}
+
+body.dark-mode .transcription-segment-text {
+    background: var(--bg-secondary);
+}
+
+body.dark-mode .transcription-segment-text:focus {
+    background: var(--bg-card);
+}
+
+body.dark-mode .waveform-placeholder {
+    opacity: 0.5;
+}
+
+body.dark-mode .btn-preview {
+    background: rgba(31, 35, 53, 0.9);
+    color: var(--text-primary);
+}
+
+body.dark-mode .btn-preview:hover {
+    background: var(--bg-card);
+}
+
+/* Dark Mode Toggle Button */
+.dark-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dark-mode-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.dark-mode-toggle.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ============================================
+   VTT Export Badge
+   ============================================ */
+.export-format-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    margin-left: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-radius: var(--radius-sm);
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+/* ============================================
+   Drag & Drop Zone
+   ============================================ */
+.drop-zone {
+    position: relative;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px 24px;
+    text-align: center;
+    transition: all 0.3s;
+    background: var(--bg-secondary);
+    cursor: pointer;
+}
+
+.drop-zone:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+}
+
+.drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    transform: scale(1.02);
+    box-shadow: 0 0 0 4px rgba(95, 124, 242, 0.1);
+}
+
+.drop-zone-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 12px;
+    color: var(--text-muted);
+    transition: all 0.3s;
+}
+
+.drop-zone:hover .drop-zone-icon,
+.drop-zone.drag-over .drop-zone-icon {
+    color: var(--accent);
+    transform: translateY(-4px);
+}
+
+.drop-zone-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.drop-zone-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.drop-zone-formats {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.format-tag {
+    padding: 4px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Audio Track Selection UI Improvements
+   ============================================ */
+.audio-track-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.audio-track-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.audio-track-title svg {
+    color: var(--accent);
+}
+
+.audio-track-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.track-action-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.track-action-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.audio-track-list {
+    padding: 8px;
+    background: var(--bg-card);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.audio-track-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.audio-track-item:hover {
+    background: var(--bg-secondary);
+}
+
+.audio-track-item.selected {
+    background: var(--accent-light);
+    border: 1px solid var(--accent);
+}
+
+.track-checkbox-custom {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 2px solid var(--border);
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.audio-track-item.selected .track-checkbox-custom {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.track-checkbox-custom svg {
+    color: white;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.audio-track-item.selected .track-checkbox-custom svg {
+    opacity: 1;
+}
+
+.track-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.track-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.track-details {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.track-waveform-mini {
+    width: 80px;
+    height: 24px;
+    background: linear-gradient(90deg,
+        var(--accent-light) 0%,
+        var(--accent-light) 30%,
+        var(--bg-tertiary) 30%,
+        var(--bg-tertiary) 35%,
+        var(--accent-light) 35%,
+        var(--accent-light) 70%,
+        var(--bg-tertiary) 70%,
+        var(--bg-tertiary) 75%,
+        var(--accent-light) 75%,
+        var(--accent-light) 100%
+    );
+    border-radius: 4px;
+    opacity: 0.7;
+}
+
+/* ============================================
+   Screen Drag Over State
+   ============================================ */
+.screen.drag-over {
+    position: relative;
+}
+
+.screen.drag-over::after {
+    content: "ファイルをドロップしてインポート";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(95, 124, 242, 0.95);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+#app.drag-over {
+    position: relative;
+}
+
+#app.drag-over::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 4px dashed var(--accent);
+    border-radius: var(--radius-lg);
+    pointer-events: none;
+    z-index: 9998;
+}
+
+/* ============================================
+   Confirmation Dialog
+   ============================================ */
+.confirmation-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.confirmation-dialog-overlay.visible {
+    opacity: 1;
+}
+
+.confirmation-dialog {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    width: 90%;
+    max-width: 380px;
+    transform: scale(0.95);
+    transition: transform 0.2s ease;
+}
+
+.confirmation-dialog-overlay.visible .confirmation-dialog {
+    transform: scale(1);
+}
+
+.confirmation-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.confirmation-header svg {
+    color: var(--accent);
+}
+
+.confirmation-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.confirmation-content {
+    padding: 20px 24px;
+}
+
+.confirmation-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+}
+
+.info-row.highlight {
+    background: var(--accent-light);
+    border: 1px solid rgba(95, 124, 242, 0.2);
+}
+
+.info-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.info-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.info-value.accent {
+    color: var(--accent);
+    font-size: 15px;
+}
+
+.confirmation-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 10px 12px;
+    background: rgba(224, 175, 104, 0.1);
+    border: 1px solid rgba(224, 175, 104, 0.3);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    color: var(--warning);
+}
+
+.confirmation-warning svg {
+    flex-shrink: 0;
+}
+
+.confirmation-actions {
+    display: flex;
+    gap: 12px;
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--border);
+}
+
+.confirmation-actions .btn-secondary {
+    flex: 1;
+}
+
+.confirmation-actions .btn-primary {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* ============================================
+   Batch Export Button
+   ============================================ */
+.batch-export-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.batch-export-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.batch-export-btn svg {
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Auto-refresh Indicator
+   ============================================ */
+.auto-refresh-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 8px;
+}
+
+.auto-refresh-indicator .dot {
+    width: 6px;
+    height: 6px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: blink 2s ease-in-out infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* ============================================
+   Progress Stage Indicator
+   ============================================ */
+.progress-stage-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin: 16px 0;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+}
+
+.progress-stage {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0.5;
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+.progress-stage.active {
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.progress-stage.complete {
+    opacity: 0.8;
+}
+
+.stage-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transition: all 0.3s;
+}
+
+.progress-stage.active .stage-dot {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.progress-stage.complete .stage-dot {
+    background: var(--success);
+}
+
+@keyframes pulse-dot {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+.stage-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    white-space: nowrap;
+}
+
+.progress-stage.active .stage-label {
+    color: white;
+    font-weight: 600;
+}
+
+.progress-stage.complete .stage-label {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.stage-connector {
+    width: 16px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 1px;
+}
+
+/* ============================================
+   Processing History
+   ============================================ */
+.history-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.history-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--border);
+    transition: all 0.2s;
+}
+
+.history-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.history-item.success {
+    border-left-color: var(--success);
+}
+
+.history-item.error {
+    border-left-color: var(--error);
+}
+
+.history-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.history-item.success .history-icon {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.history-item.error .history-icon {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--error);
+}
+
+.history-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.history-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.history-details {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ============================================
+   Settings Actions (Reset, Merge buttons)
+   ============================================ */
+.settings-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-small {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+    gap: 4px;
+}
+
+.btn-small svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ============================================
+   Retry Button
+   ============================================ */
+.retry-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+}
+
+.retry-message {
+    font-size: 12px;
+    color: var(--error);
+    text-align: center;
+}
+
+.btn-retry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--error);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-retry:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.btn-retry svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ============================================
+   Segment List (Interactive Preview)
+   ============================================ */
+.segment-list-container {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.segment-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+}
+
+.segment-list-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.segment-list-title svg {
+    color: var(--accent);
+}
+
+.segment-list-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.segment-action-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.segment-action-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.segment-list {
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--bg-card);
+}
+
+.segment-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.segment-item:last-child {
+    border-bottom: none;
+}
+
+.segment-item:hover {
+    background: var(--bg-secondary);
+}
+
+.segment-item.selected {
+    background: var(--accent-light);
+}
+
+.segment-item.excluded {
+    opacity: 0.5;
+}
+
+.segment-checkbox {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 2px solid var(--border);
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.segment-item.selected .segment-checkbox {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.segment-checkbox svg {
+    width: 10px;
+    height: 10px;
+    color: white;
+    opacity: 0;
+}
+
+.segment-item.selected .segment-checkbox svg {
+    opacity: 1;
+}
+
+.segment-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.segment-time {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: monospace;
+}
+
+.segment-duration {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.segment-preview-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.segment-preview-btn:hover {
+    background: var(--accent);
+    color: white;
+}
+
+/* ============================================
+   Settings Profiles
+   ============================================ */
+.profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-empty {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.profile-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.profile-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.profile-item.active {
+    background: var(--accent-light);
+    border: 1px solid var(--accent);
+}
+
+.profile-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+}
+
+.profile-item.active .profile-icon {
+    background: var(--accent);
+    color: white;
+}
+
+.profile-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.profile-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.profile-delete {
+    padding: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s;
+}
+
+.profile-delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--error);
+}
+
+/* ============================================
+   Statistics Dashboard
+   ============================================ */
+.stats-dashboard {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.stat-mini-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+
+.stat-mini-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    font-family: monospace;
+}
+
+.stat-mini-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* ============================================
+   Waveform Interactive Hover
+   ============================================ */
+.waveform-tooltip {
+    position: absolute;
+    padding: 4px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+}
+
+.preview-waveform {
+    position: relative;
+    cursor: crosshair;
+}
+
+.preview-waveform canvas {
+    display: block;
+}
+
+/* ============================================
+   Use Case Presets
+   ============================================ */
+.usecase-presets {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.usecase-preset-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.usecase-preset-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.usecase-preset-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.usecase-preset-btn.active svg {
+    stroke: white;
+}
+
+.usecase-preset-btn svg {
+    color: var(--accent);
+    transition: all 0.2s;
+}
+
+.usecase-preset-btn:hover svg {
+    transform: scale(1.1);
+}
+
+.auto-threshold-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+/* ============================================
+   Copy to Clipboard Button
+   ============================================ */
+.copy-result-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+}
+
+.copy-result-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.copy-result-btn.copied {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+/* ============================================
+   Segment Split Dialog
+   ============================================ */
+.split-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.split-dialog-overlay.visible {
+    opacity: 1;
+}
+
+.split-dialog {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    width: 90%;
+    max-width: 320px;
+    padding: 20px;
+    transform: scale(0.95);
+    transition: transform 0.2s ease;
+}
+
+.split-dialog-overlay.visible .split-dialog {
+    transform: scale(1);
+}
+
+.split-dialog h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.split-dialog h3 svg {
+    color: var(--accent);
+}
+
+.split-time-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.split-time-input input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: monospace;
+}
+
+.split-time-input input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.split-dialog-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.split-dialog-actions button {
+    flex: 1;
+}
+
+/* ============================================
+   Segment Action Buttons
+   ============================================ */
+.segment-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.segment-action-mini {
+    padding: 4px;
+    border: none;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.segment-action-mini:hover {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.segment-action-mini svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* ============================================
+   Prompt Preset Buttons
+   ============================================ */
+.prompt-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.prompt-preset-btn {
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.prompt-preset-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.prompt-preset-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* Textarea input for custom prompt */
+.textarea-input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    transition: all 0.2s;
+}
+
+.textarea-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-card);
+    box-shadow: 0 0 0 3px rgba(95, 124, 242, 0.1);
+}
+
+.textarea-input::placeholder {
+    color: var(--text-muted);
 }
