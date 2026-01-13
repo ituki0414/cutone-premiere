@@ -827,11 +827,11 @@
                         <p class="input-hint" style="margin-bottom: 8px;">後処理に使用するモデル:</p>
                         <div class="radio-group">
                             <label class="radio-label">
-                                <input type="radio" name="llmModel" value="gpt-5-mini" checked>
+                                <input type="radio" name="llmModel" value="gpt-5.2-pro">
                                 <span class="radio-dot"></span>
                                 <div class="radio-content">
-                                    <span>GPT-5 Mini</span>
-                                    <span class="radio-hint">高速・低コスト（推奨）</span>
+                                    <span>GPT-5.2 pro</span>
+                                    <span class="radio-hint">最高精度</span>
                                 </div>
                             </label>
                             <label class="radio-label">
@@ -843,27 +843,19 @@
                                 </div>
                             </label>
                             <label class="radio-label">
-                                <input type="radio" name="llmModel" value="gpt-5.2-pro">
+                                <input type="radio" name="llmModel" value="gpt-5-mini" checked>
                                 <span class="radio-dot"></span>
                                 <div class="radio-content">
-                                    <span>GPT-5.2 Pro</span>
-                                    <span class="radio-hint">より賢く正確</span>
+                                    <span>GPT-5 mini</span>
+                                    <span class="radio-hint">高速・低コスト（推奨）</span>
                                 </div>
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="llmModel" value="gpt-5-nano">
                                 <span class="radio-dot"></span>
                                 <div class="radio-content">
-                                    <span>GPT-5 Nano</span>
+                                    <span>GPT-5 nano</span>
                                     <span class="radio-hint">最速・最低コスト</span>
-                                </div>
-                            </label>
-                            <label class="radio-label">
-                                <input type="radio" name="llmModel" value="gpt-4.1">
-                                <span class="radio-dot"></span>
-                                <div class="radio-content">
-                                    <span>GPT-4.1</span>
-                                    <span class="radio-hint">非推論モデル</span>
                                 </div>
                             </label>
                         </div>
@@ -884,7 +876,7 @@
                         <div class="input-group compact">
                             <label>最大文字数</label>
                             <div class="input-with-unit">
-                                <input type="number" id="maxCharsPerSegment" class="input small" value="18" min="0" max="100" step="1">
+                                <input type="number" id="maxCharsPerSegment" class="input small" value="30" min="0" max="100" step="1">
                                 <span class="unit">文字</span>
                             </div>
                             <span class="input-hint">0 = 制限なし</span>
