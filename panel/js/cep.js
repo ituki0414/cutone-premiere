@@ -1541,20 +1541,37 @@ const CEP = (function() {
                         language === "ko" ? "韓国語" :
                         language === "zh" ? "中国語" : "日本語";
 
-        const systemPrompt = `あなたは音声認識の文字起こし結果を校正する専門家です。
-以下のルールに従って文字起こしテキストを修正してください：
+        const systemPrompt = `あなたはプロの字幕ライターです。音声認識の文字起こしを、読みやすい字幕に変換してください。
 
-1. 誤字脱字を修正
-2. 句読点を適切に配置
-3. 話し言葉の「えー」「あのー」などのフィラーは削除
-4. 専門用語や固有名詞の誤認識を修正
-5. 文脈に合わない単語を正しく修正
-6. 改行はそのまま維持（各行がセグメントに対応）
+## 修正ルール
+1. 誤字脱字・誤認識を修正
+2. 「えー」「あのー」などのフィラーを削除
+3. 句読点は最小限に（読点「、」は間を表現したい箇所のみ、句点「。」は不要）
+
+## セグメント分割ルール（重要）
+- 各セグメントは「---」で区切る
+- 1セグメント = 1つの意味のまとまり（視聴者が一目で読める量）
+- 分割の目安：
+  - 文の終わり
+  - 接続詞の前（「そして」「しかし」「だから」など）
+  - 意味の区切り目
+  - 長い文は15〜25文字程度で分割
+- 1セグメント内で改行して2行にしてもOK
+
+## 出力例
+今日は新機能について
+説明します
+---
+まず最初に
+基本的な使い方から
+---
+次にアドバンス機能を
+紹介していきます
 
 言語: ${langName}
-${customPrompt ? `\n重要な専門用語・キーワード: ${customPrompt}` : ""}
+${customPrompt ? `\n専門用語・キーワード: ${customPrompt}` : ""}
 
-修正後のテキストのみを出力してください。説明は不要です。`;
+修正・分割したテキストのみを出力。説明不要。`;
 
         return new Promise((resolve, reject) => {
             const requestBody = JSON.stringify({
@@ -1600,18 +1617,39 @@ ${customPrompt ? `\n重要な専門用語・キーワード: ${customPrompt}` : 
                         }
 
                         const correctedText = result.choices[0].message.content;
-                        const correctedLines = correctedText.split("\n").filter(line => line.trim());
 
-                        console.log("[CEP] LLM correction complete, lines:", correctedLines.length);
+                        // Parse segments separated by ---
+                        const rawSegments = correctedText.split("---").map(s => s.trim()).filter(s => s);
+                        console.log("[CEP] LLM correction complete, segments:", rawSegments.length);
 
-                        // Map corrected text back to segments
-                        const correctedSegments = segments.map((seg, i) => {
-                            return {
-                                ...seg,
-                                text: correctedLines[i] || seg.text,
-                                originalText: seg.text // Keep original for reference
-                            };
-                        });
+                        // Calculate total duration and redistribute timing
+                        const totalStart = segments[0]?.start || 0;
+                        const totalEnd = segments[segments.length - 1]?.end || 0;
+                        const totalDuration = totalEnd - totalStart;
+
+                        // Calculate total characters for proportional timing
+                        const totalChars = rawSegments.reduce((sum, s) => sum + s.replace(/\n/g, "").length, 0);
+
+                        // Create new segments with proportional timing
+                        const correctedSegments = [];
+                        let currentTime = totalStart;
+
+                        for (let i = 0; i < rawSegments.length; i++) {
+                            const text = rawSegments[i];
+                            const charCount = text.replace(/\n/g, "").length;
+                            const segDuration = totalChars > 0
+                                ? (charCount / totalChars) * totalDuration
+                                : totalDuration / rawSegments.length;
+
+                            correctedSegments.push({
+                                id: i + 1,
+                                start: currentTime,
+                                end: currentTime + segDuration,
+                                text: text
+                            });
+
+                            currentTime += segDuration;
+                        }
 
                         if (onProgress) onProgress("LLM補正完了", 90);
                         resolve(correctedSegments);
@@ -1654,20 +1692,37 @@ ${customPrompt ? `\n重要な専門用語・キーワード: ${customPrompt}` : 
                         language === "ko" ? "韓国語" :
                         language === "zh" ? "中国語" : "日本語";
 
-        const systemPrompt = `あなたは音声認識の文字起こし結果を校正する専門家です。
-以下のルールに従って文字起こしテキストを修正してください：
+        const systemPrompt = `あなたはプロの字幕ライターです。音声認識の文字起こしを、読みやすい字幕に変換してください。
 
-1. 誤字脱字を修正
-2. 句読点を適切に配置
-3. 話し言葉の「えー」「あのー」などのフィラーは削除
-4. 専門用語や固有名詞の誤認識を修正
-5. 文脈に合わない単語を正しく修正
-6. 改行はそのまま維持（各行がセグメントに対応）
+## 修正ルール
+1. 誤字脱字・誤認識を修正
+2. 「えー」「あのー」などのフィラーを削除
+3. 句読点は最小限に（読点「、」は間を表現したい箇所のみ、句点「。」は不要）
+
+## セグメント分割ルール（重要）
+- 各セグメントは「---」で区切る
+- 1セグメント = 1つの意味のまとまり（視聴者が一目で読める量）
+- 分割の目安：
+  - 文の終わり
+  - 接続詞の前（「そして」「しかし」「だから」など）
+  - 意味の区切り目
+  - 長い文は15〜25文字程度で分割
+- 1セグメント内で改行して2行にしてもOK
+
+## 出力例
+今日は新機能について
+説明します
+---
+まず最初に
+基本的な使い方から
+---
+次にアドバンス機能を
+紹介していきます
 
 言語: ${langName}
-${customPrompt ? `\n重要な専門用語・キーワード: ${customPrompt}` : ""}
+${customPrompt ? `\n専門用語・キーワード: ${customPrompt}` : ""}
 
-修正後のテキストのみを出力してください。説明は不要です。`;
+修正・分割したテキストのみを出力。説明不要。`;
 
         const fullText = segments.map(s => s.text).join("\n");
 
@@ -1827,16 +1882,39 @@ ${customPrompt ? `\n重要な専門用語・キーワード: ${customPrompt}` : 
             const responseLines = (typeof outputResult.data === "string" ? outputResult.data : JSON.stringify(outputResult.data)).split("\n").filter(l => l.trim());
             const firstResult = JSON.parse(responseLines[0]);
             const correctedText = firstResult.response.body.choices[0].message.content;
-            const correctedLines = correctedText.split("\n").filter(line => line.trim());
 
-            console.log("[CEP] Batch LLM correction complete, lines:", correctedLines.length);
+            // Parse segments separated by ---
+            const rawSegments = correctedText.split("---").map(s => s.trim()).filter(s => s);
+            console.log("[CEP] Batch LLM correction complete, segments:", rawSegments.length);
 
-            // Map corrected text back to segments
-            const correctedSegments = segments.map((seg, i) => ({
-                ...seg,
-                text: correctedLines[i] || seg.text,
-                originalText: seg.text
-            }));
+            // Calculate total duration and redistribute timing
+            const totalStart = segments[0]?.start || 0;
+            const totalEnd = segments[segments.length - 1]?.end || 0;
+            const totalDuration = totalEnd - totalStart;
+
+            // Calculate total characters for proportional timing
+            const totalChars = rawSegments.reduce((sum, s) => sum + s.replace(/\n/g, "").length, 0);
+
+            // Create new segments with proportional timing
+            const correctedSegments = [];
+            let currentTime = totalStart;
+
+            for (let i = 0; i < rawSegments.length; i++) {
+                const text = rawSegments[i];
+                const charCount = text.replace(/\n/g, "").length;
+                const segDuration = totalChars > 0
+                    ? (charCount / totalChars) * totalDuration
+                    : totalDuration / rawSegments.length;
+
+                correctedSegments.push({
+                    id: i + 1,
+                    start: currentTime,
+                    end: currentTime + segDuration,
+                    text: text
+                });
+
+                currentTime += segDuration;
+            }
 
             if (onProgress) onProgress("Batch API補正完了", 96);
             return correctedSegments;
