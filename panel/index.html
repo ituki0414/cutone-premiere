@@ -764,6 +764,44 @@
                     </div>
                 </div>
 
+                <!-- Scribe v2 Section -->
+                <div class="settings-card">
+                    <h3 class="settings-card-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            <line x1="12" y1="19" x2="12" y2="22"/>
+                        </svg>
+                        高精度文字起こし（Scribe v2）
+                    </h3>
+                    <p class="settings-card-desc">ElevenLabs Scribe v2で高精度な文字起こし（コスト約1/10）</p>
+                    <div class="checkbox-group" style="margin-top: 12px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="useScribeV2">
+                            <span class="checkbox-box"></span>
+                            <div class="checkbox-content">
+                                <span>Scribe v2を使用する</span>
+                                <span class="checkbox-hint">単語レベルタイムスタンプ対応</span>
+                            </div>
+                        </label>
+                    </div>
+                    <div id="scribeApiKeySection" class="form-group" style="margin-top: 12px; display: none;">
+                        <label class="input-label">ElevenLabs API キー</label>
+                        <div class="input-with-toggle">
+                            <input type="text" id="elevenLabsApiKey" class="input" placeholder="sk_xxxxxxxxxxxxxxxx" style="font-family: monospace;">
+                            <button class="toggle-visibility-btn" id="toggleElevenLabsApiKeyBtn" type="button">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="input-hint" style="margin-top: 8px;">
+                            <a href="#" id="elevenLabsApiLink" style="color: #5f7cf2;">ElevenLabs APIキーを取得 →</a>
+                        </p>
+                    </div>
+                </div>
+
                 <!-- Language Section -->
                 <div class="settings-card">
                     <h3 class="settings-card-title">

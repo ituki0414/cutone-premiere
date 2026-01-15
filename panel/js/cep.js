@@ -991,10 +991,17 @@ const CEP = (function() {
             throw new Error("音声ファイルの抽出に失敗しました");
         }
 
-        // Step 3: Send to Whisper API
+        // Step 3: Send to transcription API (Scribe v2 or Whisper)
         if (onProgress) onProgress("AIで文字起こし中...", 30);
 
-        const transcription = await callWhisperAPI(audioPath, options.apiKey, options.language, onProgress, options.customPrompt || "");
+        let transcription;
+        if (options.useScribeV2 && options.elevenLabsApiKey) {
+            console.log("[CEP] Using Scribe v2 for transcription");
+            transcription = await callScribeAPI(audioPath, options.elevenLabsApiKey, options.language, onProgress, options.customPrompt || "");
+        } else {
+            console.log("[CEP] Using Whisper for transcription");
+            transcription = await callWhisperAPI(audioPath, options.apiKey, options.language, onProgress, options.customPrompt || "");
+        }
 
         // Step 4: Clean up temp file
         try {
@@ -1514,6 +1521,196 @@ const CEP = (function() {
             req.write(requestBody);
             req.end();
         });
+    }
+
+    /**
+     * Transcribe audio using ElevenLabs Scribe v2 API
+     * @param {string} audioPath - Path to audio file
+     * @param {string} apiKey - ElevenLabs API key
+     * @param {string} language - Language code
+     * @param {Function} onProgress - Progress callback
+     * @param {string} customPrompt - User-provided custom keywords/terminology
+     */
+    async function callScribeAPI(audioPath, apiKey, language, onProgress, customPrompt = "") {
+        const https = require("https");
+        const fs = require("fs");
+
+        return new Promise((resolve, reject) => {
+            // Read audio file
+            const audioData = fs.readFileSync(audioPath);
+            const stats = fs.statSync(audioPath);
+            const fileSizeMB = stats.size / (1024 * 1024);
+            console.log("[CEP] Audio file size for Scribe:", fileSizeMB.toFixed(2), "MB");
+
+            // Create multipart form data
+            const boundary = "----CutOneScribeBoundary" + Date.now();
+
+            // Build form data parts
+            let formData = "";
+
+            // File header
+            formData += `--${boundary}\r\n`;
+            formData += `Content-Disposition: form-data; name="file"; filename="audio.mp3"\r\n`;
+            formData += `Content-Type: audio/mpeg\r\n\r\n`;
+
+            const fileHeader = Buffer.from(formData, "utf8");
+
+            // Other fields
+            let otherFields = `\r\n--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="model_id"\r\n\r\nscribe_v1\r\n`;
+
+            // Language
+            if (language && language !== "auto") {
+                otherFields += `--${boundary}\r\n`;
+                otherFields += `Content-Disposition: form-data; name="language_code"\r\n\r\n${language}\r\n`;
+            }
+
+            // Request word-level timestamps
+            otherFields += `--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="timestamps_granularity"\r\n\r\nword\r\n`;
+
+            // Tag audio events
+            otherFields += `--${boundary}\r\n`;
+            otherFields += `Content-Disposition: form-data; name="tag_audio_events"\r\n\r\ntrue\r\n`;
+
+            // Add keyterms if provided
+            if (customPrompt) {
+                const terms = customPrompt.split(/[,、\n]/).map(t => t.trim()).filter(t => t.length > 0).slice(0, 100);
+                if (terms.length > 0) {
+                    otherFields += `--${boundary}\r\n`;
+                    otherFields += `Content-Disposition: form-data; name="keyterms"\r\n\r\n${JSON.stringify(terms)}\r\n`;
+                }
+            }
+
+            otherFields += `--${boundary}--\r\n`;
+
+            const otherFieldsBuffer = Buffer.from(otherFields, "utf8");
+
+            // Combine all parts
+            const requestBody = Buffer.concat([fileHeader, audioData, otherFieldsBuffer]);
+
+            const requestOptions = {
+                hostname: "api.elevenlabs.io",
+                port: 443,
+                path: "/v1/speech-to-text",
+                method: "POST",
+                headers: {
+                    "xi-api-key": apiKey,
+                    "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                    "Content-Length": requestBody.length
+                }
+            };
+
+            console.log("[CEP] Calling Scribe v2 API...");
+            if (onProgress) onProgress("Scribe v2 APIに送信中...", 35);
+
+            const req = https.request(requestOptions, (res) => {
+                let responseData = "";
+
+                res.on("data", (chunk) => {
+                    responseData += chunk;
+                    if (onProgress) onProgress("文字起こし中...", 50 + Math.min(responseData.length / 1000, 40));
+                });
+
+                res.on("end", () => {
+                    try {
+                        const result = JSON.parse(responseData);
+
+                        if (res.statusCode !== 200) {
+                            console.error("[CEP] Scribe API error:", result);
+                            reject(new Error(`Scribe API error: ${res.statusCode} - ${JSON.stringify(result)}`));
+                            return;
+                        }
+
+                        console.log("[CEP] Scribe API success, words:", result.words?.length);
+
+                        // Build segments from word-level timestamps
+                        const segments = buildSegmentsFromWords(result.words || [], result.text || "");
+
+                        console.log("[CEP] Built segments:", segments.length);
+
+                        resolve({
+                            text: result.text || "",
+                            segments: segments,
+                            language: result.language_code || language
+                        });
+                    } catch (e) {
+                        console.error("[CEP] Parse error:", e, responseData.substring(0, 500));
+                        reject(new Error("APIレスポンスの解析に失敗しました"));
+                    }
+                });
+            });
+
+            req.on("error", (e) => {
+                console.error("[CEP] Request error:", e);
+                reject(new Error("APIリクエストに失敗: " + e.message));
+            });
+
+            req.write(requestBody);
+            req.end();
+        });
+    }
+
+    /**
+     * Build segments from word-level timestamps (for Scribe v2)
+     * @param {Array} words - Word objects from Scribe API
+     * @param {string} fullText - Full transcription text
+     * @returns {Array} Segments with start/end times
+     */
+    function buildSegmentsFromWords(words, fullText) {
+        const segments = [];
+        const maxSegmentDuration = 5.0; // seconds
+        const maxWordsPerSegment = 15;
+
+        // Filter out spacing elements
+        const actualWords = words.filter(w => w.type !== "spacing" && w.text && w.text.trim());
+
+        if (actualWords.length === 0) {
+            // Fallback: create a single segment from full text
+            if (fullText) {
+                return [{
+                    id: 1,
+                    start: 0,
+                    end: 5,
+                    text: fullText.trim()
+                }];
+            }
+            return [];
+        }
+
+        let currentSegment = [];
+        let segmentId = 1;
+
+        for (const word of actualWords) {
+            currentSegment.push(word);
+
+            const segmentDuration = word.end - currentSegment[0].start;
+            const shouldBreak =
+                segmentDuration >= maxSegmentDuration ||
+                currentSegment.length >= maxWordsPerSegment;
+
+            if (shouldBreak) {
+                segments.push({
+                    id: segmentId++,
+                    start: currentSegment[0].start,
+                    end: word.end,
+                    text: currentSegment.map(w => w.text).join("")
+                });
+                currentSegment = [];
+            }
+        }
+
+        // Add remaining words as final segment
+        if (currentSegment.length > 0) {
+            segments.push({
+                id: segmentId,
+                start: currentSegment[0].start,
+                end: currentSegment[currentSegment.length - 1].end,
+                text: currentSegment.map(w => w.text).join("")
+            });
+        }
+
+        return segments;
     }
 
     /**

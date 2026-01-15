@@ -51,6 +51,11 @@
         openaiApiKey: document.getElementById("openaiApiKey"),
         toggleApiKeyBtn: document.getElementById("toggleApiKeyBtn"),
         openaiApiLink: document.getElementById("openaiApiLink"),
+        useScribeV2: document.getElementById("useScribeV2"),
+        scribeApiKeySection: document.getElementById("scribeApiKeySection"),
+        elevenLabsApiKey: document.getElementById("elevenLabsApiKey"),
+        toggleElevenLabsApiKeyBtn: document.getElementById("toggleElevenLabsApiKeyBtn"),
+        elevenLabsApiLink: document.getElementById("elevenLabsApiLink"),
         addToSequence: document.getElementById("addToSequence"),
         exportSrt: document.getElementById("exportSrt"),
         exportVtt: document.getElementById("exportVtt"),
@@ -454,6 +459,9 @@
         elements.transcriptionRefreshBtn.addEventListener("click", refreshTranscriptionSequenceInfo);
         elements.toggleApiKeyBtn.addEventListener("click", toggleApiKeyVisibility);
         elements.openaiApiLink.addEventListener("click", openOpenAIApiPage);
+        elements.useScribeV2.addEventListener("change", toggleScribeApiKeySection);
+        elements.toggleElevenLabsApiKeyBtn.addEventListener("click", toggleElevenLabsApiKeyVisibility);
+        elements.elevenLabsApiLink.addEventListener("click", openElevenLabsApiPage);
         elements.startTranscriptionBtn.addEventListener("click", startTranscription);
         elements.reTranscribeBtn.addEventListener("click", resetTranscription);
         elements.applyTranscriptionBtn.addEventListener("click", applyTranscription);
@@ -471,6 +479,14 @@
             // Auto-save on valid input
             if (key && key.startsWith("sk-") && key.length > 20) {
                 saveApiKey(key);
+            }
+        });
+
+        // ElevenLabs API key auto-save
+        elements.elevenLabsApiKey.addEventListener("input", (e) => {
+            const key = e.target.value.trim();
+            if (key) {
+                localStorage.setItem("cutone_elevenlabs_api_key", key);
             }
         });
 
@@ -920,6 +936,8 @@
         showScreen("transcription");
         // Load saved API key
         loadSavedApiKey();
+        // Load saved Scribe v2 settings
+        loadScribeSettings();
         // Load saved language preference
         loadSavedLanguage();
         // Load saved output options
@@ -967,6 +985,39 @@
     function openOpenAIApiPage(e) {
         e.preventDefault();
         CEP.openURL("https://platform.openai.com/api-keys");
+    }
+
+    function toggleScribeApiKeySection() {
+        const isChecked = elements.useScribeV2.checked;
+        elements.scribeApiKeySection.style.display = isChecked ? "block" : "none";
+        localStorage.setItem("cutone_use_scribe_v2", isChecked ? "true" : "false");
+    }
+
+    function toggleElevenLabsApiKeyVisibility() {
+        const input = elements.elevenLabsApiKey;
+        if (input.type === "password") {
+            input.type = "text";
+        } else {
+            input.type = "password";
+        }
+    }
+
+    function openElevenLabsApiPage(e) {
+        e.preventDefault();
+        CEP.openURL("https://elevenlabs.io/app/settings/api-keys");
+    }
+
+    function loadScribeSettings() {
+        // Restore Scribe v2 checkbox
+        const useScribe = localStorage.getItem("cutone_use_scribe_v2") === "true";
+        elements.useScribeV2.checked = useScribe;
+        elements.scribeApiKeySection.style.display = useScribe ? "block" : "none";
+
+        // Restore ElevenLabs API key
+        const savedKey = localStorage.getItem("cutone_elevenlabs_api_key");
+        if (savedKey) {
+            elements.elevenLabsApiKey.value = savedKey;
+        }
     }
 
     function loadSavedApiKey() {
@@ -2466,6 +2517,18 @@
             return;
         }
 
+        // Check if using Scribe v2
+        const useScribeV2 = elements.useScribeV2.checked;
+
+        if (useScribeV2) {
+            // Validate ElevenLabs API key
+            const elevenLabsApiKey = elements.elevenLabsApiKey.value.trim();
+            if (!elevenLabsApiKey) {
+                showToast("ElevenLabs APIキーを入力してください", "error");
+                return;
+            }
+        }
+
         const apiKey = elements.openaiApiKey.value.trim();
         if (!apiKey) {
             showToast("OpenAI APIキーを入力してください", "error");
@@ -2523,7 +2586,10 @@
                 subtitleFormat: {
                     maxCharsPerSegment: maxCharsPerSegment,
                     maxLinesPerSegment: maxLinesPerSegment
-                }
+                },
+                // Scribe v2 options
+                useScribeV2: useScribeV2,
+                elevenLabsApiKey: useScribeV2 ? elements.elevenLabsApiKey.value.trim() : null
             };
 
             const result = await CEP.transcribeAudio(options, (message, percent) => {
